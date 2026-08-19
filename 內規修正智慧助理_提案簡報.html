@@ -1,0 +1,924 @@
+<title>內規修正智慧助理</title>
+<style>
+  /* ══ 識別取自產品本身：修正對照表的紅字標示色 C00000 ═══════════════ */
+  :root{
+    --ground:#EFF2F5;
+    --panel:#FFFFFF;
+    --panel-2:#E5EAF0;
+    --ink:#0F1319;
+    --ink-2:#4B5563;
+    --ink-3:#7B8695;
+    --rule:#CBD3DD;
+    --rule-2:#DFE5EC;
+    --mark:#C00000;
+    --mark-wash:#FAEDED;
+    --deep:#123A44;
+    --deep-wash:#E3EDEF;
+    --amber:#8A6512;
+    --amber-wash:#F5EFE0;
+    --code-bg:#12171E;
+    --code-ink:#C6D0DC;
+    --code-dim:#66727F;
+    --code-hit:#F2857C;
+    --code-ok:#7FC29B;
+
+    --serif:"Noto Serif TC","Source Han Serif TC","Songti TC",PMingLiU,
+            "新細明體",Georgia,serif;
+    --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei","微軟正黑體",
+           -apple-system,"Segoe UI",sans-serif;
+    --kai:DFKai-SB,BiauKai,"標楷體",TW-Kai,"Noto Serif TC",serif;
+    --mono:ui-monospace,"Cascadia Mono",Consolas,"Noto Sans Mono CJK TC",monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#0D1116;
+      --panel:#141A21;
+      --panel-2:#1C232C;
+      --ink:#E9ECF1;
+      --ink-2:#9BA5B3;
+      --ink-3:#6E7A88;
+      --rule:#28313C;
+      --rule-2:#202832;
+      --mark:#E4635A;
+      --mark-wash:#2A1918;
+      --deep:#7FC4CF;
+      --deep-wash:#14262B;
+      --amber:#C9A24E;
+      --amber-wash:#25200F;
+      --code-bg:#070A0E;
+      --code-ink:#BAC4D2;
+      --code-dim:#5B6772;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0D1116;
+    --panel:#141A21;
+    --panel-2:#1C232C;
+    --ink:#E9ECF1;
+    --ink-2:#9BA5B3;
+    --ink-3:#6E7A88;
+    --rule:#28313C;
+    --rule-2:#202832;
+    --mark:#E4635A;
+    --mark-wash:#2A1918;
+    --deep:#7FC4CF;
+    --deep-wash:#14262B;
+    --amber:#C9A24E;
+    --amber-wash:#25200F;
+    --code-bg:#070A0E;
+    --code-ink:#BAC4D2;
+    --code-dim:#5B6772;
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
+  body{
+    margin:0;background:var(--ground);color:var(--ink);
+    font-family:var(--sans);font-size:16px;line-height:1.75;
+    -webkit-font-smoothing:antialiased;
+    scroll-snap-type:y proximity;
+  }
+
+  .slide{
+    scroll-snap-align:start;
+    min-height:100vh;
+    display:flex;flex-direction:column;justify-content:center;
+    padding:72px 28px 64px;
+    border-bottom:1px solid var(--rule);
+  }
+  .slide > .inner{width:100%;max-width:1080px;margin:0 auto;}
+
+  /* ── 側邊頁碼 ─────────────────────────────────────────────────── */
+  .rail{
+    position:fixed;right:16px;top:50%;transform:translateY(-50%);
+    display:flex;flex-direction:column;gap:9px;z-index:20;
+  }
+  .rail a{
+    width:9px;height:9px;border:1px solid var(--ink-3);
+    display:block;text-indent:-9999px;overflow:hidden;
+    transition:background .18s,border-color .18s;
+  }
+  .rail a:hover,.rail a.on{background:var(--mark);border-color:var(--mark);}
+  @media (max-width:820px){.rail{display:none;}}
+
+  /* ── 共用排版 ─────────────────────────────────────────────────── */
+  .eyebrow{
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.24em;
+    text-transform:uppercase;color:var(--mark);margin:0 0 18px;
+    display:flex;align-items:center;gap:12px;
+  }
+  .eyebrow::after{
+    content:"";flex:1;height:1px;background:var(--rule);max-width:180px;
+  }
+  h1{
+    font-family:var(--serif);font-weight:900;
+    font-size:clamp(38px,7.2vw,78px);line-height:1.1;letter-spacing:-.02em;
+    margin:0 0 22px;text-wrap:balance;
+  }
+  h2{
+    font-family:var(--serif);font-weight:800;
+    font-size:clamp(27px,4.2vw,44px);line-height:1.22;letter-spacing:-.015em;
+    margin:0 0 16px;text-wrap:balance;
+  }
+  h3{font-family:var(--sans);font-size:15.5px;font-weight:700;margin:0 0 8px;
+     letter-spacing:.01em;}
+  .lede{
+    font-size:clamp(16px,1.9vw,20px);color:var(--ink-2);
+    margin:0 0 34px;max-width:60ch;line-height:1.7;text-wrap:pretty;
+  }
+  p{margin:0 0 14px;}
+  .small{font-size:14px;color:var(--ink-2);}
+  a{color:var(--mark);}
+  :focus-visible{outline:2px solid var(--mark);outline-offset:3px;}
+  strong{font-weight:700;}
+  code{
+    font-family:var(--mono);font-size:.88em;background:var(--panel-2);
+    padding:1px 6px;border:1px solid var(--rule-2);
+  }
+
+  /* ── 01 封面 ──────────────────────────────────────────────────── */
+  .cover{background:var(--panel);}
+  .cover .kicker{
+    font-family:var(--mono);font-size:12.5px;letter-spacing:.18em;
+    color:var(--ink-3);margin:0 0 30px;
+  }
+  .cover h1{max-width:15ch;}
+  .cover .sub{
+    font-size:clamp(17px,2.3vw,23px);color:var(--ink-2);
+    max-width:46ch;margin:0 0 44px;line-height:1.65;
+  }
+  .signature{
+    display:flex;flex-wrap:wrap;gap:0 44px;padding-top:26px;
+    border-top:2px solid var(--ink);font-family:var(--mono);font-size:12.5px;
+  }
+  .signature div{display:flex;flex-direction:column;gap:3px;padding:4px 0;}
+  .signature .k{color:var(--ink-3);letter-spacing:.1em;}
+  .signature .v{color:var(--ink);font-size:14px;}
+  .signature .blank{
+    color:var(--ink-3);border-bottom:1px solid var(--rule);
+    min-width:130px;padding-bottom:2px;
+  }
+
+  /* ── 對照式版面（整份簡報的骨架，呼應修正對照表） ────────────────── */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:0;
+         border:1px solid var(--rule);background:var(--panel);}
+  @media (max-width:760px){.split{grid-template-columns:1fr;}}
+  .split > div{padding:26px 28px;}
+  .split > div + div{border-left:1px solid var(--rule);}
+  @media (max-width:760px){
+    .split > div + div{border-left:0;border-top:1px solid var(--rule);}
+  }
+  .split .tag{
+    font-family:var(--mono);font-size:11px;letter-spacing:.16em;
+    text-transform:uppercase;margin:0 0 10px;
+  }
+  .split .tag.bad{color:var(--mark);}
+  .split .tag.good{color:var(--deep);}
+  .split .tag.warn{color:var(--amber);}
+
+  /* ── 卡片列 ───────────────────────────────────────────────────── */
+  .cards{display:grid;gap:14px;
+         grid-template-columns:repeat(auto-fit,minmax(232px,1fr));}
+  .card{
+    background:var(--panel);border:1px solid var(--rule);
+    padding:20px 20px 22px;display:flex;flex-direction:column;gap:6px;
+  }
+  .card.accent{border-top:3px solid var(--mark);}
+  .card.deepline{border-top:3px solid var(--deep);}
+  .card .t{font-weight:700;font-size:15.5px;}
+  .card .d{font-size:13.8px;color:var(--ink-2);line-height:1.65;}
+  .card .n{
+    font-family:var(--mono);font-size:11px;letter-spacing:.14em;
+    color:var(--ink-3);
+  }
+
+  /* ── 數字 ─────────────────────────────────────────────────────── */
+  .figures{display:flex;flex-wrap:wrap;gap:1px;background:var(--rule);
+           border:1px solid var(--rule);}
+  .fig{flex:1 1 165px;background:var(--panel);padding:22px 20px;
+       display:flex;flex-direction:column;gap:4px;}
+  .fig .v{
+    font-family:var(--mono);font-size:clamp(28px,4vw,40px);font-weight:700;
+    line-height:1;letter-spacing:-.025em;font-variant-numeric:tabular-nums;
+  }
+  .fig .v.mark{color:var(--mark);}
+  .fig .k{font-size:13px;color:var(--ink-3);}
+  .fig .note{font-size:12px;color:var(--ink-3);font-family:var(--mono);}
+
+  /* ── 修正對照表（主角投影片） ───────────────────────────────────── */
+  .compare{border:2px solid var(--mark);background:var(--panel);}
+  .compare-head{
+    background:var(--mark-wash);border-bottom:1px solid var(--mark);
+    padding:15px 22px;display:flex;flex-wrap:wrap;gap:6px 20px;align-items:baseline;
+  }
+  .compare-head .score{
+    font-family:var(--mono);font-size:clamp(24px,3.4vw,32px);font-weight:800;
+    color:var(--mark);line-height:1;font-variant-numeric:tabular-nums;
+  }
+  .compare-head .lab{font-size:14px;color:var(--ink-2);}
+  .compare-body{display:grid;grid-template-columns:1fr 1fr;}
+  @media (max-width:760px){.compare-body{grid-template-columns:1fr;}}
+  .compare-col{padding:20px 22px 24px;}
+  .compare-col + .compare-col{border-left:1px solid var(--rule);}
+  @media (max-width:760px){
+    .compare-col + .compare-col{border-left:0;border-top:1px solid var(--rule);}
+  }
+  .compare-col .where{
+    font-family:var(--mono);font-size:11px;letter-spacing:.13em;
+    color:var(--ink-3);margin:0 0 10px;text-transform:uppercase;
+  }
+  .clause{font-family:var(--kai);font-size:clamp(16px,1.9vw,19px);
+          line-height:2.05;margin:0;}
+  .del{color:var(--mark);text-decoration:line-through;}
+  .ins{color:var(--mark);text-decoration:underline;font-weight:700;}
+  .compare-foot{
+    border-top:1px solid var(--rule);background:var(--panel-2);
+    padding:14px 22px;font-size:13.5px;color:var(--ink-2);
+  }
+
+  /* ── 架構圖 ───────────────────────────────────────────────────── */
+  .arch{display:flex;flex-direction:column;gap:0;}
+  .layer{
+    background:var(--panel);border:1px solid var(--rule);
+    display:grid;grid-template-columns:150px 1fr;
+  }
+  @media (max-width:700px){.layer{grid-template-columns:1fr;}}
+  .layer + .layer{border-top:0;}
+  .layer .side{
+    background:var(--panel-2);padding:16px 18px;
+    border-right:1px solid var(--rule);
+    display:flex;flex-direction:column;gap:3px;justify-content:center;
+  }
+  @media (max-width:700px){
+    .layer .side{border-right:0;border-bottom:1px solid var(--rule);}
+  }
+  .layer .side .n{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+                  color:var(--ink-3);}
+  .layer .side .t{font-weight:700;font-size:15px;}
+  .layer .body{padding:16px 18px;display:flex;flex-wrap:wrap;gap:8px;
+               align-items:center;}
+  .chip{
+    border:1px solid var(--rule);background:var(--ground);
+    padding:5px 11px;font-size:13px;white-space:nowrap;
+  }
+  .chip.det{border-color:var(--deep);color:var(--deep);}
+  .chip.llm{border-color:var(--amber);color:var(--amber);}
+  .chip.out{border-color:var(--mark);color:var(--mark);}
+  .arrow{
+    text-align:center;color:var(--ink-3);font-family:var(--mono);
+    font-size:15px;line-height:1;padding:7px 0;
+  }
+  .arch-note{
+    margin-top:16px;padding:13px 18px;background:var(--deep-wash);
+    border-left:3px solid var(--deep);font-size:14px;color:var(--ink);
+  }
+
+  /* ── 表格 ─────────────────────────────────────────────────────── */
+  .tw{overflow-x:auto;border:1px solid var(--rule);background:var(--panel);}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:600px;}
+  th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--rule-2);
+        vertical-align:top;}
+  thead th{background:var(--panel-2);font-size:12px;letter-spacing:.06em;
+           color:var(--ink-2);border-bottom:1px solid var(--rule);
+           white-space:nowrap;}
+  tbody tr:last-child td{border-bottom:0;}
+  td.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;}
+
+  /* ── 帶狀圖 ───────────────────────────────────────────────────── */
+  .bars{border:1px solid var(--rule);background:var(--panel);padding:22px;}
+  .brow{display:grid;grid-template-columns:78px 1fr 132px;gap:14px;
+        align-items:center;padding:6px 0;}
+  .brow .b{font-family:var(--mono);font-size:12.5px;color:var(--ink-2);
+           font-variant-numeric:tabular-nums;}
+  .track{height:18px;background:var(--panel-2);overflow:hidden;}
+  .track .fill{display:flex;height:100%;}
+  .track .fill span{display:block;height:100%;}
+  .s-a{background:var(--deep);}
+  .s-b{background:var(--mark);}
+  .brow .c{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);
+           text-align:right;font-variant-numeric:tabular-nums;}
+  .lgd{display:flex;gap:22px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2);
+       margin-top:14px;padding-top:14px;border-top:1px solid var(--rule-2);}
+  .lgd i{width:11px;height:11px;display:inline-block;margin-right:6px;
+         vertical-align:-1px;}
+
+  /* ── 主控台 ───────────────────────────────────────────────────── */
+  .term{
+    background:var(--code-bg);color:var(--code-ink);font-family:var(--mono);
+    font-size:12.5px;line-height:1.72;padding:16px 18px;overflow-x:auto;
+  }
+  .term pre{margin:0;white-space:pre;}
+  .term .dim{color:var(--code-dim);}
+  .term .hit{color:var(--code-hit);font-weight:600;}
+  .term .ok{color:var(--code-ok);}
+
+  /* ── 時程 ─────────────────────────────────────────────────────── */
+  .phases{display:grid;gap:0;grid-template-columns:repeat(3,1fr);
+          border:1px solid var(--rule);background:var(--panel);}
+  @media (max-width:760px){.phases{grid-template-columns:1fr;}}
+  .phase{padding:22px;}
+  .phase + .phase{border-left:1px solid var(--rule);}
+  @media (max-width:760px){
+    .phase + .phase{border-left:0;border-top:1px solid var(--rule);}
+  }
+  .phase .p{font-family:var(--mono);font-size:11px;letter-spacing:.16em;
+            color:var(--mark);margin:0 0 8px;}
+  .phase h3{margin:0 0 8px;font-family:var(--serif);font-size:19px;font-weight:800;}
+  .phase ul{margin:0;padding-left:17px;font-size:14px;color:var(--ink-2);
+            line-height:1.7;}
+
+  /* ── 條列 ─────────────────────────────────────────────────────── */
+  .dash{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;
+        gap:11px;}
+  .dash li{padding-left:21px;position:relative;color:var(--ink-2);
+           max-width:66ch;font-size:15.2px;}
+  .dash li::before{content:"—";position:absolute;left:0;color:var(--mark);}
+  .dash b{color:var(--ink);}
+
+  .callout{
+    border-left:3px solid var(--mark);background:var(--mark-wash);
+    padding:15px 20px;font-size:15px;color:var(--ink);max-width:68ch;
+  }
+  .askbox{
+    border:1px solid var(--rule);background:var(--panel);padding:22px 24px;
+    display:flex;flex-direction:column;gap:14px;
+  }
+  .askbox .row{display:grid;grid-template-columns:26px 1fr;gap:14px;}
+  .askbox .i{font-family:var(--mono);font-size:12px;color:var(--mark);
+             padding-top:4px;font-weight:700;}
+  .askbox .t{font-weight:700;margin:0 0 3px;font-size:15.5px;}
+  .askbox .d{font-size:14px;color:var(--ink-2);margin:0;line-height:1.65;}
+
+  .hint{
+    position:fixed;left:50%;bottom:16px;transform:translateX(-50%);
+    font-family:var(--mono);font-size:11px;letter-spacing:.12em;
+    color:var(--ink-3);background:var(--panel);border:1px solid var(--rule);
+    padding:5px 13px;z-index:20;
+  }
+  @media (max-width:820px){.hint{display:none;}}
+</style>
+
+<nav class="rail" aria-label="投影片導覽">
+  <a href="#s1" title="封面">1</a><a href="#s2" title="問題">2</a>
+  <a href="#s3" title="設計原則">3</a><a href="#s4" title="實證">4</a>
+  <a href="#s5" title="架構">5</a><a href="#s6" title="決策依據">6</a>
+  <a href="#s7" title="平台相容">7</a><a href="#s8" title="品質">8</a>
+  <a href="#s9" title="可擴充">9</a><a href="#s10" title="全行願景">10</a>
+  <a href="#s11" title="導入建議">11</a><a href="#s12" title="界線與請求">12</a>
+</nav>
+<div class="hint">↓ 捲動或按方向鍵換頁</div>
+
+<!-- 01 ─────────────────────────────────────────────────────────── -->
+<section class="slide cover" id="s1">
+  <div class="inner">
+    <p class="kicker">SPADE 平台 SKILL 提案　／　技術評估</p>
+    <h1>內規修正<br>智慧助理</h1>
+    <p class="sub">
+      改一條內規，別章還有幾條在講同一件事？<br>
+      這個 skill 用程式把它們全部找出來。
+    </p>
+    <div class="signature">
+      <div><span class="k">CODENAME</span><span class="v">reg-diff</span></div>
+      <div><span class="k">平台</span><span class="v">SPADE</span></div>
+      <div><span class="k">狀態</span><span class="v">已完成開發與沙箱驗證</span></div>
+      <div><span class="k">提案單位</span><span class="v blank">　</span></div>
+      <div><span class="k">提案人</span><span class="v blank">　</span></div>
+      <div><span class="k">日期</span><span class="v blank">　</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 ─────────────────────────────────────────────────────────── -->
+<section class="slide" id="s2">
+  <div class="inner">
+    <p class="eyebrow">問題</p>
+    <h2>漏改不是打錯字，是同一件事寫在三個地方</h2>
+    <p class="lede">
+      銀行內規常依通路分章：臨櫃一章、網路一章、行動一章。
+      同一項規定在每一章各寫一次。修法時改了第一章，
+      第三章那條用詞不同、位置很遠，很容易讀過去。
+    </p>
+    <div class="split">
+      <div>
+        <p class="tag bad">現在怎麼查</p>
+        <ul class="dash" style="gap:9px;">
+          <li>人工逐條讀完全文，靠記憶回想「這句好像在哪看過」</li>
+          <li>用 Word 尋找關鍵字——但漏改的那條，用詞剛好不一樣</li>
+          <li>五十頁的內規，這件事沒有人能保證做完</li>
+        </ul>
+      </div>
+      <div>
+        <p class="tag warn">出事的代價</p>
+        <ul class="dash" style="gap:9px;">
+          <li>同一份內規出現兩套規定，客戶依通路不同而權益不同</li>
+          <li>內控自行查核、金檢時被指出條文互相矛盾</li>
+          <li>發現時通常已經公告施行，要再走一次修正程序</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 03 ─────────────────────────────────────────────────────────── -->
+<section class="slide" id="s3">
+  <div class="inner">
+    <p class="eyebrow">設計原則</p>
+    <h2>該讓程式做的，不要交給模型猜</h2>
+    <p class="lede">
+      這是整個設計的分界線，也是它敢用在法遵場合的原因。
+    </p>
+    <div class="split">
+      <div>
+        <p class="tag good">程式層　零誤差、可重複驗證</p>
+        <p class="small" style="margin-bottom:12px;">
+          找出文字差異、比對相似度、檢查條號、抓跨章節重複。
+          規則明確、結果穩定，換一次模型不會跑出不同答案。
+        </p>
+        <ul class="dash" style="gap:8px;font-size:14px;">
+          <li>用 Needleman-Wunsch 序列對齊配對段落，不會條號錯位</li>
+          <li>字級差異比對，紅字底線與刪除線照公文慣例標</li>
+          <li>相似度計算全部只用 Python 標準函式庫</li>
+        </ul>
+      </div>
+      <div>
+        <p class="tag warn">模型層　只做需要理解意思的</p>
+        <p class="small" style="margin-bottom:12px;">
+          說明兩條條文為什麼相關、判斷有沒有邏輯矛盾、草擬公文。
+          這些程式做不到，但也不會影響「有沒有抓到」。
+        </p>
+        <ul class="dash" style="gap:8px;font-size:14px;">
+          <li>模型漏看不會造成漏抓——候選清單是程式產的</li>
+          <li>模型的判斷一律標示為建議，人工複核後才送出</li>
+          <li>正式對照表的「修改依據」欄程式一律留白，不代筆</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout" style="margin-top:22px;">
+      模型處理長文本會漏看、會記錯位置。把「有沒有抓到」交給模型，
+      等於把法遵風險押在模型當天的狀態上。
+    </div>
+  </div>
+</section>
+
+<!-- 04 ─────────────────────────────────────────────────────────── -->
+<section class="slide" id="s4">
+  <div class="inner">
+    <p class="eyebrow">實證</p>
+    <h2>沙箱實跑：它抓到了那條漏改</h2>
+    <p class="lede">
+      測資是一份虛構的招攬要點，裡面藏了一條漏改：
+      第二章的退費期限改成三十日，第三章講同一件事的條文忘了跟著改。
+    </p>
+    <div class="compare">
+      <div class="compare-head">
+        <span class="score">94.4%</span>
+        <span class="lab">第六條　→　第三章 第十四條　／　共同片段 23 字</span>
+      </div>
+      <div class="compare-body">
+        <div class="compare-col">
+          <p class="where">第二章　一般通路　第六條　已修改</p>
+          <p class="clause">要保人得於契約撤銷期間內以書面通知本公司撤銷契約，本公司應於收到通知之次日起<span class="del">十五日</span><span class="ins">三十日</span>內無息退還已繳保險費。</p>
+        </div>
+        <div class="compare-col">
+          <p class="where">第三章　網路投保　第十四條　沒有改到</p>
+          <p class="clause">要保人得於契約撤銷期間內以電子方式通知本公司撤銷契約，本公司應於收到通知之次日起<span class="del">十五日</span>內無息退還已繳保險費。</p>
+        </div>
+      </div>
+      <div class="compare-foot">
+        判定相關的理由：<code>書面通知 ＝ 通知</code>（可稽核的同義詞表）。
+        不是只給一個分數——法遵要能回答「為什麼系統認為這兩條相關」。
+      </div>
+    </div>
+    <p class="small" style="margin-top:18px;max-width:70ch;">
+      兩條條文用詞不同（書面通知／電子方式通知）、分屬不同章、相隔十幾條。
+      純關鍵字搜尋找不到，靠人逐條讀很容易滑過去。
+    </p>
+  </div>
+</section>
+
+<!-- 05 ─────────────────────────────────────────────────────────── -->
+<section class="slide" id="s5">
+  <div class="inner">
+    <p class="eyebrow">架構</p>
+    <h2>四層，界線清楚</h2>
+    <p class="lede">
+      七支純 Python 命令列程式，不綁任何 AI 服務。
+      可以掛在 SPADE 上，也可以完全不透過 AI 當一般工具用。
+    </p>
+    <div class="arch">
+      <div class="layer">
+        <div class="side"><span class="n">INPUT</span><span class="t">輸入</span></div>
+        <div class="body">
+          <span class="chip">舊版 .docx</span><span class="chip">新版 .docx</span>
+          <span class="chip">.txt ／ .md</span>
+          <span class="chip">Word 追蹤修訂</span>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+      <div class="layer">
+        <div class="side"><span class="n">DETERMINISTIC</span><span class="t">程式層</span></div>
+        <div class="body">
+          <span class="chip det">Step 0.5　條號與交叉引用</span>
+          <span class="chip det">Step 1　精確比對</span>
+          <span class="chip det">Step 1.6　品質檢查十項</span>
+          <span class="chip det">Step 2　跨章節抓漏</span>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+      <div class="layer">
+        <div class="side"><span class="n">LLM</span><span class="t">模型層</span></div>
+        <div class="body">
+          <span class="chip llm">說明候選為什麼相關</span>
+          <span class="chip llm">檢查條文間有無矛盾</span>
+          <span class="chip llm">草擬公文</span>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+      <div class="layer">
+        <div class="side"><span class="n">OUTPUT</span><span class="t">產出</span></div>
+        <div class="body">
+          <span class="chip out">修正對照表</span>
+          <span class="chip out">標註版全文</span>
+          <span class="chip out">條文檢查報告</span>
+          <span class="chip out">重複條文候選清單</span>
+          <span class="chip out">公文初稿</span>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+      <div class="layer">
+        <div class="side"><span class="n">REVIEW</span><span class="t">人工複核</span></div>
+        <div class="body">
+          <span class="chip">不可略過的一步。所有產出都是輔助，最終由法遵確認後送出。</span>
+        </div>
+      </div>
+    </div>
+    <div class="arch-note">
+      程式層與模型層之間是單向的：程式產候選、模型加說明。
+      模型不會回頭改變候選清單，所以「抓到什麼」是可重複驗證的。
+    </div>
+  </div>
+</section>
+
+<!-- 06 ─────────────────────────────────────────────────────────── -->
+<section class="slide" id="s6">
+  <div class="inner">
+    <p class="eyebrow">決策依據</p>
+    <h2>每一個門檻都有實測數字</h2>
+    <p class="lede">
+      這套沒有「憑感覺調參數」。以「相似度門檻以外還要看什麼」這個判斷為例，
+      依據來自 1,199 段內規跑出來的 152 筆候選。
+    </p>
+    <div class="bars">
+      <div class="brow"><span class="b">90–100%</span>
+        <span class="track"><span class="fill" style="width:100%"><span class="s-a" style="width:100%"></span></span></span>
+        <span class="c">句首 75　句中 0</span></div>
+      <div class="brow"><span class="b">80–89%</span>
+        <span class="track"><span class="fill" style="width:42.7%"><span class="s-a" style="width:100%"></span></span></span>
+        <span class="c">句首 32　句中 0</span></div>
+      <div class="brow"><span class="b">70–79%</span>
+        <span class="track"><span class="fill" style="width:6.7%"><span class="s-a" style="width:20%"></span><span class="s-b" style="width:80%"></span></span></span>
+        <span class="c">句首 1　句中 4</span></div>
+      <div class="brow"><span class="b">60–69%</span>
+        <span class="track"><span class="fill" style="width:40%"><span class="s-b" style="width:100%"></span></span></span>
+        <span class="c">句首 0　句中 30</span></div>
+      <div class="brow"><span class="b">50–59%</span>
+        <span class="track"><span class="fill" style="width:13.3%"><span class="s-b" style="width:100%"></span></span></span>
+        <span class="c">句首 0　句中 10</span></div>
+      <div class="lgd">
+        <span><i style="background:var(--deep)"></i>共同片段從句首開始</span>
+        <span><i style="background:var(--mark)"></i>共同片段從句中或句尾開始</span>
+      </div>
+    </div>
+    <div class="cards" style="margin-top:20px;">
+      <div class="card deepline">
+        <span class="n">得到的結論</span>
+        <span class="t">80 分是分界</span>
+        <span class="d">80 分以上的 107 筆，共同片段全部從句首開始；
+          公文套語造成的假陽性最高只到 79.4 分。門檻因此設在 80。</span>
+      </div>
+      <div class="card accent">
+        <span class="n">失敗的嘗試也記下來</span>
+        <span class="t">語意向量：已移除</span>
+        <span class="d">需要 PyTorch 與可連外下載的模型，企業平台通常兩者都沒有；
+          更關鍵的是它說不出「為什麼這兩條相關」。改用可稽核的同義詞表。</span>
+      </div>
+      <div class="card accent">
+        <span class="n">失敗的嘗試也記下來</span>
+        <span class="t">TF-IDF：實測更差</span>
+        <span class="d">同一組測資分數從 34.3 掉到 1.3。負面結果寫進文件，
+          避免下一個接手的人再試一次同樣的死路。</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 07 ─────────────────────────────────────────────────────────── -->
+<section class="slide" id="s7">
+  <div class="inner">
+    <p class="eyebrow">平台相容性</p>
+    <h2>照 SPADE 的實際限制設計，不是事後遷就</h2>
+    <p class="lede">
+      平台限制是先探測、再設計。每一項限制都對應一個明確的設計決定，
+      並在仿 SPADE 的沙箱裡實跑驗證過。
+    </p>
+    <div class="tw">
+      <table>
+        <thead>
+          <tr><th>SPADE 的限制</th><th>對應的設計</th><th>驗證方式</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>套件庫固定，沒有 pip</b><br><span class="small">裝不了 python-docx、rapidfuzz</span></td>
+            <td>核心功能只用標準函式庫。<code>.docx</code> 讀檔一律用內建 XML 解析，連 Word 追蹤修訂都讀得到</td>
+            <td class="n">沙箱阻擋所有外部套件後實跑</td>
+          </tr>
+          <tr>
+            <td><b>每次執行給全新暫存目錄</b><br><span class="small">上次寫的檔案下次不存在</span></td>
+            <td>提供 <code>run_all.py</code> 單次執行入口，四個步驟在同一個行程跑完，中間結果全在記憶體傳遞</td>
+            <td class="n">沙箱每次執行換目錄後實跑</td>
+          </tr>
+          <tr>
+            <td><b>沒有家目錄</b><br><span class="small"><code>Path.home()</code> 會拋出例外</span></td>
+            <td>不碰家目錄，所有路徑相對於執行目錄或由 <code>--outdir</code> 指定</td>
+            <td class="n">沙箱讓 <code>Path.home()</code> 拋錯後實跑</td>
+          </tr>
+          <tr>
+            <td><b>產出不顯示在對話裡</b><br><span class="small">使用者得自己去資料夾拿</span></td>
+            <td>結尾一律列出<b>絕對路徑</b>清單，並明講「若平台不顯示檔案請依路徑取用」</td>
+            <td class="n">實跑輸出逐行檢查</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="term" style="margin-top:16px;">
+<pre><span class="dim">【套件狀態】</span>
+  － 無 python-docx　　－ 無 rapidfuzz
+
+<span class="dim">【目前可用的功能】</span>
+  <span class="ok">✓</span> 讀 .docx 內規（含追蹤修訂）　<span class="ok">✓</span> Step 0.5 條號與交叉引用
+  <span class="ok">✓</span> Step 1 精確比對與對照表　　　<span class="ok">✓</span> Step 1.6 品質檢查十項
+  <span class="ok">✓</span> Step 2 跨章節重複條文　　　　<span class="ok">✓</span> Step 2 同義詞正規化
+
+<span class="dim">【目前不可用的功能】</span>
+  ✗ 輸出 Word 格式對照表（需要 python-docx，改出 CSV，內容相同）
+
+<span class="ok">核心功能完全可用。缺套件只影響輸出格式，不影響抓不抓得到問題。</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- 08 ─────────────────────────────────────────────────────────── -->
+<section class="slide" id="s8">
+  <div class="inner">
+    <p class="eyebrow">品質保證</p>
+    <h2>回歸測試是這個專案的地基</h2>
+    <p class="lede">
+      每一個修正過的缺陷都配一組測試。改回去就會紅。
+      這讓它可以交接、可以被別人接手改，而不是只有作者敢動。
+    </p>
+    <div class="figures">
+      <div class="fig"><span class="v">266</span><span class="k">函式層自我檢查</span><span class="note">selftest.py</span></div>
+      <div class="fig"><span class="v">6</span><span class="k">全流程整合步驟</span><span class="note">run_pipeline.py</span></div>
+      <div class="fig"><span class="v">22</span><span class="k">邊界情況</span><span class="note">空檔、壞檔、超長段落</span></div>
+      <div class="fig"><span class="v">46</span><span class="k">部署驗收</span><span class="note">解壓後實跑</span></div>
+      <div class="fig"><span class="v mark">0</span><span class="k">未通過</span><span class="note">最近一次全跑</span></div>
+    </div>
+    <div class="cards" style="margin-top:20px;">
+      <div class="card deepline">
+        <span class="t">測試釘住的是判斷，不只是程式</span>
+        <span class="d">「門檻 70 確實會漏掉第十二條」「插入的追蹤修訂文字有讀到」——
+          測試名稱直接寫出當初的判斷，任何人想改回去都會看到理由。</span>
+      </div>
+      <div class="card deepline">
+        <span class="t">真實規模驗證</span>
+        <span class="d">測試會即時產生一份約 50 頁、含章節條款目完整層級的內規，
+          1,199 段全文比對在 10 秒內完成。</span>
+      </div>
+      <div class="card deepline">
+        <span class="t">部署包單獨驗收</span>
+        <span class="d">壓縮檔解到全新目錄後實跑一次，
+          確認寄出去的東西是能動的，不是只有開發機能跑。</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 09 ─────────────────────────────────────────────────────────── -->
+<section class="slide" id="s9">
+  <div class="inner">
+    <p class="eyebrow">可擴充</p>
+    <h2>該讓法遵自己改的，不要寫在程式碼裡</h2>
+    <p class="lede">
+      各單位的公文格式、慣用語、用語規範都不一樣。
+      這三件事全部讀設定檔，而且各自附一個瀏覽器就能開的編輯器。
+    </p>
+    <div class="cards">
+      <div class="card accent">
+        <span class="n">SYNONYMS.JSON</span>
+        <span class="t">同義詞表</span>
+        <span class="d">決定「用詞完全換掉的重複條文抓不抓得到」。
+          目前 30 組、90 個變體。編輯器可以貼兩條真實條文，
+          當場看加了這組詞之後分數從幾分變到幾分。</span>
+      </div>
+      <div class="card accent">
+        <span class="n">對照表格式.JSON</span>
+        <span class="t">對照表版面</span>
+        <span class="d">紙張方向、邊界、字級、表頭底色、紅字標示樣式、
+          欄位的顯示與順序全部可調。編輯器會算 A4 可用寬度，
+          欄寬超出時當場警告。</span>
+      </div>
+      <div class="card accent">
+        <span class="n">--TERMS</span>
+        <span class="t">用語規範表</span>
+        <span class="d">「要保人／投保人」這類該統一的用語，
+          各單位可以帶自己的對照表。設定檔改壞了會退回預設值，
+          不會讓整份報告產不出來。</span>
+      </div>
+    </div>
+    <div class="callout" style="margin-top:22px;">
+      編輯器是單一 HTML 檔，不連任何外部資源，雙擊就能開。
+      不需要伺服器、不需要網路、不需要工程師。
+    </div>
+  </div>
+</section>
+
+<!-- 10 ────────────────────────────────────────────────────────── -->
+<section class="slide" id="s10">
+  <div class="inner">
+    <p class="eyebrow">願景</p>
+    <h2>它其實不只是法遵的工具</h2>
+    <p class="lede">
+      核心能力是「新舊版本比對＋找出漏改的相關段落」。
+      任何有版本管理需求的文件都適用，不限單一部門。
+    </p>
+    <div class="cards">
+      <div class="card deepline">
+        <span class="n">已驗證</span>
+        <span class="t">法令遵循</span>
+        <span class="d">內規修正、對照表製作、跨章節漏改檢查、公文初稿</span>
+      </div>
+      <div class="card"><span class="n">可延伸</span><span class="t">作業流程 SOP</span>
+        <span class="d">各單位作業手冊改版，找出其他章節要跟著調整的段落</span></div>
+      <div class="card"><span class="n">可延伸</span><span class="t">商品條款</span>
+        <span class="d">同一系列商品條款改版，比對各商品之間的一致性</span></div>
+      <div class="card"><span class="n">可延伸</span><span class="t">系統規格書</span>
+        <span class="d">需求文件改版，找出相依章節</span></div>
+      <div class="card"><span class="n">可延伸</span><span class="t">內控制度</span>
+        <span class="d">自行查核項目與內規條文的對應維護</span></div>
+      <div class="card"><span class="n">可延伸</span><span class="t">契約範本</span>
+        <span class="d">制式契約改版，比對各版本間的差異與遺漏</span></div>
+    </div>
+    <p class="small" style="margin-top:20px;max-width:70ch;">
+      標示「可延伸」的用途尚未實測，是依核心能力推論的適用範圍。
+      實際導入前建議各以一份真實文件試跑確認。
+    </p>
+  </div>
+</section>
+
+<!-- 11 ────────────────────────────────────────────────────────── -->
+<section class="slide" id="s11">
+  <div class="inner">
+    <p class="eyebrow">導入建議</p>
+    <h2>先做小、做準，再談推廣</h2>
+    <p class="lede">
+      工具已經可以用，但只跑過自製測資。
+      建議先用一個單位、一份真實內規把「準不準」問清楚。
+    </p>
+    <div class="phases">
+      <div class="phase">
+        <p class="p">PHASE 01</p>
+        <h3>試點</h3>
+        <ul>
+          <li>一個法遵單位、一份真實內規</li>
+          <li>與人工複核結果對照，量測抓到率與誤報率</li>
+          <li>由法遵校準同義詞表</li>
+          <li>確認 SPADE 平台規格與檔案取用方式</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <p class="p">PHASE 02</p>
+        <h3>單位推廣</h3>
+        <ul>
+          <li>調整對照表版面符合本行公文格式</li>
+          <li>建立單位共用的同義詞表與用語規範表</li>
+          <li>寫一份給法遵看的操作說明</li>
+          <li>累積實際案例與工時數據</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <p class="p">PHASE 03</p>
+        <h3>全行</h3>
+        <ul>
+          <li>開放其他有版本比對需求的單位使用</li>
+          <li>各單位可帶自己的設定檔</li>
+          <li>依累積案例決定是否擴充檢查項目</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout" style="margin-top:22px;">
+      每一階段的通過條件都應該是數字，不是感覺。
+      第一階段沒有量到抓到率與誤報率之前，不建議往下走。
+    </div>
+  </div>
+</section>
+
+<!-- 12 ────────────────────────────────────────────────────────── -->
+<section class="slide" id="s12">
+  <div class="inner">
+    <p class="eyebrow">界線與請求</p>
+    <h2>還沒做到的事，先講清楚</h2>
+    <div class="split" style="margin-bottom:26px;">
+      <div>
+        <p class="tag bad">目前的限制</p>
+        <ul class="dash" style="gap:9px;font-size:14.6px;">
+          <li><b>只跑過自製測資。</b>還沒有拿真實內規驗證過抓到率與誤報率</li>
+          <li><b>省下多少工時尚未量測。</b>試點前不做任何效益承諾</li>
+          <li><b>抓漏不保證完整。</b>門檻以下的候選不會列出，是輔助不是保證</li>
+          <li><b>用 Word 表格排版的條文</b>會失去列與欄的結構</li>
+          <li><b>母法有沒有修正、條文間有無矛盾，程式查不到</b>，只會列出該查證的清單</li>
+        </ul>
+      </div>
+      <div>
+        <p class="tag good">這些限制怎麼處理</p>
+        <ul class="dash" style="gap:9px;font-size:14.6px;">
+          <li>限制全部寫進 SKILL.md 與安裝說明，不是藏起來</li>
+          <li>程式抓不到條號時留白，不硬猜一個錯的填進正式文件</li>
+          <li>「修改依據／理由」欄一律留白，不代法遵寫理由</li>
+          <li>每份產出結尾都提醒：最終仍需人工複核後才能送出</li>
+        </ul>
+      </div>
+    </div>
+    <p class="eyebrow" style="margin-bottom:14px;">需要的協助</p>
+    <div class="askbox">
+      <div class="row">
+        <span class="i">01</span>
+        <div>
+          <p class="t">一個試點單位、一份真實內規</p>
+          <p class="d">這是最關鍵的一項。沒有真實文件，抓到率與誤報率就只能用猜的。</p>
+        </div>
+      </div>
+      <div class="row">
+        <span class="i">02</span>
+        <div>
+          <p class="t">SPADE 平台規格確認</p>
+          <p class="d">skill 放在哪個目錄、使用者怎麼上傳檔案、產出檔案怎麼取用。
+            目前依探測結果設計，需要平台方確認。</p>
+        </div>
+      </div>
+      <div class="row">
+        <span class="i">03</span>
+        <div>
+          <p class="t">法遵協助校準同義詞表</p>
+          <p class="d">同義詞表決定抓不抓得到換過用詞的條文。
+            目前的 30 組是通用詞，需要換成本行實際的慣用語。</p>
+        </div>
+      </div>
+      <div class="row">
+        <span class="i">04</span>
+        <div>
+          <p class="t">本行公文格式規範</p>
+          <p class="d">對照表版面已經做成可調設定，需要知道本行的實際格式要求。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var dots   = Array.prototype.slice.call(document.querySelectorAll('.rail a'));
+
+  if ('IntersectionObserver' in window){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if (!e.isIntersecting) return;
+        var i = slides.indexOf(e.target);
+        dots.forEach(function(d, j){ d.classList.toggle('on', i === j); });
+      });
+    }, {threshold: 0.5});
+    slides.forEach(function(s){ io.observe(s); });
+  }
+
+  function current(){
+    var best = 0, bestDist = Infinity;
+    slides.forEach(function(s, i){
+      var d = Math.abs(s.getBoundingClientRect().top);
+      if (d < bestDist){ bestDist = d; best = i; }
+    });
+    return best;
+  }
+
+  document.addEventListener('keydown', function(e){
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var step = 0;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown'
+        || e.key === ' ') step = 1;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') step = -1;
+    if (!step) return;
+    var target = slides[Math.min(slides.length - 1, Math.max(0, current() + step))];
+    if (target){ e.preventDefault(); target.scrollIntoView({block:'start'}); }
+  });
+})();
+</script>
