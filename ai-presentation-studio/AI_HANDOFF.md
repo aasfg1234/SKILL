@@ -1,7 +1,9 @@
 # AI Handoff
 
 兩個 AI 輪流開發這個專案。這個檔案只保存「目前最新的接力狀態」。
-完整紀錄在 `AI_HISTORY/`。
+
+- 規則本體在 `AI_PROTOCOL.md`。**第一次接手請先讀它。**
+- 完整歷史紀錄在 `AI_HISTORY/`。
 
 ---
 
@@ -26,7 +28,7 @@ AI Presentation Studio 單機版 MVP 可用。
 - AI Handoff Package 匯出與 Completed JSON 匯回都已完成
 - 完全不串接任何 AI API，這是第一版刻意的設計
 
-Session 001 做了兩件事：導入接力紀錄系統，並把工作目錄中 1336 行從未提交的改動原樣存檔（commit `397645c`）。
+Session 001 做了三件事：寫下 `AI_PROTOCOL.md`、建立接力紀錄系統、把工作目錄中 1336 行從未提交的改動原樣存檔（commit `397645c`）。
 
 ---
 
@@ -51,8 +53,11 @@ Session 001 做了兩件事：導入接力紀錄系統，並把工作目錄中 1
 
 ## 接力規則摘要
 
+完整規則在 `AI_PROTOCOL.md`。以下只是提醒。
+
 開始工作前：
 
+0. 讀 `AI_PROTOCOL.md`
 1. 讀這個檔案，確認最新 Session 是誰做的
 2. 若最新 Session 是另一個 AI：從自己上一個 Session 讀到最新 Session
 3. 若最新 Session 是自己：直接從自己最新 Session 繼續
