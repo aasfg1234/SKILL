@@ -47,6 +47,10 @@ export interface BaseElement {
   type: ElementType;
   /** 使用者可讀名稱（圖層列表用） */
   name?: string;
+  /** 同一張投影片中，共用此 ID 的元素視為同一個群組。 */
+  groupId?: string;
+  /** 群組顯示名稱；同一群組的成員應使用相同名稱。 */
+  groupName?: string;
   x: number;
   y: number;
   width: number;

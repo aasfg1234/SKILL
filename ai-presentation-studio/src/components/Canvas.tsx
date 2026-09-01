@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import {
   allocateTaskId,
   createAiComponentElement,
@@ -13,6 +13,7 @@ import { editorStore, useEditorState, type ToolId } from '../store/editorStore';
 import { pickImageFile } from '../lib/files';
 import { suggestedFormat } from '../lib/labels';
 import { ElementView, sortByZ } from './ElementView';
+import { Icon } from './Icon';
 
 /** 畫布：真正的選取、拖曳、縮放、對齊與繪製，全部以指標事件實作。 */
 
@@ -32,6 +33,8 @@ interface ResizeState {
   startY: number;
   original: { x: number; y: number; width: number; height: number };
   elementId: string;
+  originals: Map<string, SlideElement>;
+  isGroup: boolean;
 }
 
 interface MarqueeState {
@@ -75,6 +78,110 @@ function intersects(a: Rect, b: Rect): boolean {
   );
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/** 依群組外框的變化，同步換算一個成員的位置、大小與可縮放樣式。 */
+export function scaleElementWithinBounds(
+  element: SlideElement,
+  from: Rect,
+  to: Rect,
+): SlideElement {
+  const scaleX = from.width > 0 ? to.width / from.width : 1;
+  const scaleY = from.height > 0 ? to.height / from.height : 1;
+  const styleScale = Math.min(Math.abs(scaleX), Math.abs(scaleY));
+  const copy = structuredClone(element);
+  copy.x = Math.round(to.x + (element.x - from.x) * scaleX);
+  copy.y = Math.round(to.y + (element.y - from.y) * scaleY);
+  copy.width = Math.max(MIN_SIZE, Math.round(element.width * scaleX));
+  copy.height = Math.max(MIN_SIZE, Math.round(element.height * scaleY));
+
+  if (copy.type === 'text' && element.type === 'text') {
+    copy.fontSize = Math.max(1, Math.round(element.fontSize * styleScale));
+    copy.letterSpacing = Math.round(element.letterSpacing * styleScale * 100) / 100;
+  } else if (copy.type === 'rect' && element.type === 'rect') {
+    copy.strokeWidth = Math.round(element.strokeWidth * styleScale * 100) / 100;
+    copy.radius = Math.round(element.radius * styleScale * 100) / 100;
+  } else if (copy.type === 'ellipse' && element.type === 'ellipse') {
+    copy.strokeWidth = Math.round(element.strokeWidth * styleScale * 100) / 100;
+  } else if (copy.type === 'line' && element.type === 'line') {
+    copy.strokeWidth = Math.max(1, Math.round(element.strokeWidth * styleScale * 100) / 100);
+  } else if (copy.type === 'image' && element.type === 'image') {
+    copy.radius = Math.round(element.radius * styleScale * 100) / 100;
+  }
+  return copy;
+}
+
+/** 把元素完整留在投影片內。 */
+export function fitRectToCanvas(rect: Rect, canvasWidth: number, canvasHeight: number): Rect {
+  const width = Math.min(canvasWidth, Math.max(MIN_SIZE, rect.width));
+  const height = Math.min(canvasHeight, Math.max(MIN_SIZE, rect.height));
+  return {
+    x: clamp(rect.x, 0, Math.max(0, canvasWidth - width)),
+    y: clamp(rect.y, 0, Math.max(0, canvasHeight - height)),
+    width,
+    height,
+  };
+}
+
+/** 點一下新增時，優先找不會壓住現有內容的位置。 */
+export function findOpenPlacement(
+  preferred: Rect,
+  canvasWidth: number,
+  canvasHeight: number,
+  elements: SlideElement[],
+): Rect {
+  const base = fitRectToCanvas(preferred, canvasWidth, canvasHeight);
+  const blockers = elements.filter((el) => !el.hidden && !el.locked);
+  const isOpen = (candidate: Rect) =>
+    blockers.every(
+      (el) =>
+        !intersects(candidate, {
+          x: el.x - 16,
+          y: el.y - 16,
+          width: el.width + 32,
+          height: el.height + 32,
+        }),
+    );
+
+  if (isOpen(base)) return base;
+
+  const candidates: Rect[] = [];
+  const step = 40;
+  for (let y = 24; y <= canvasHeight - base.height; y += step) {
+    for (let x = 24; x <= canvasWidth - base.width; x += step) {
+      candidates.push({ ...base, x, y });
+    }
+  }
+  candidates.sort(
+    (a, b) =>
+      Math.hypot(a.x - base.x, a.y - base.y) - Math.hypot(b.x - base.x, b.y - base.y),
+  );
+  return candidates.find(isOpen) ?? base;
+}
+
+/** 計算選取元素壓到幾個可編輯元素；鎖定背景不算。 */
+export function countSelectedOverlaps(elements: SlideElement[], selectedIds: string[]): number {
+  const selected = new Set(selectedIds);
+  const hits = new Set<string>();
+  for (const current of elements) {
+    if (!selected.has(current.id) || current.hidden) continue;
+    for (const other of elements) {
+      if (
+        selected.has(other.id) ||
+        other.hidden ||
+        other.locked ||
+        current.id === other.id
+      ) {
+        continue;
+      }
+      if (intersects(current, other)) hits.add(other.id);
+    }
+  }
+  return hits.size;
+}
+
 export function Canvas() {
   const state = useEditorState();
   const slide = state.presentation.slides.find((s) => s.id === state.currentSlideId);
@@ -83,9 +190,11 @@ export function Canvas() {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const interaction = useRef<Interaction>(null);
+  const pendingTextCaret = useRef<{ x: number; y: number } | null>(null);
   const [marquee, setMarquee] = useState<Rect | null>(null);
   const [drawing, setDrawing] = useState<Rect | null>(null);
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
+  const [motionInfo, setMotionInfo] = useState<Rect | null>(null);
 
   const zoom = state.zoom;
 
@@ -181,19 +290,15 @@ export function Canvas() {
     e.stopPropagation();
     const additive = e.shiftKey || e.metaKey || e.ctrlKey;
     const alreadySelected = state.selectedIds.includes(el.id);
-    if (!alreadySelected) editorStore.select([el.id], additive);
-    else if (additive)
-      editorStore.select(state.selectedIds.filter((id) => id !== el.id));
+    const selectedIds =
+      alreadySelected && !additive
+        ? state.selectedIds
+        : editorStore.selectElement(el.id, additive);
 
     if (el.locked) return;
+    if (selectedIds.length === 0) return;
 
-    const ids = new Set(
-      alreadySelected
-        ? state.selectedIds
-        : additive
-          ? [...state.selectedIds, el.id]
-          : [el.id],
-    );
+    const ids = new Set(selectedIds);
     const originals = new Map<string, { x: number; y: number; width: number; height: number }>();
     for (const item of slide?.elements ?? []) {
       if (ids.has(item.id) && !item.locked) {
@@ -211,16 +316,26 @@ export function Canvas() {
     (e.target as Element).setPointerCapture?.(e.pointerId);
   };
 
-  const onHandlePointerDown = (e: React.PointerEvent, handle: Handle, el: SlideElement) => {
+  const onHandlePointerDown = (
+    e: React.PointerEvent,
+    handle: Handle,
+    targets: SlideElement[],
+    original: Rect,
+    isGroup: boolean,
+  ) => {
     e.stopPropagation();
+    const first = targets[0];
+    if (!first) return;
     const point = toStage(e.clientX, e.clientY);
     interaction.current = {
       kind: 'resize',
       handle,
       startX: point.x,
       startY: point.y,
-      elementId: el.id,
-      original: { x: el.x, y: el.y, width: el.width, height: el.height },
+      elementId: first.id,
+      original,
+      originals: new Map(targets.map((el) => [el.id, structuredClone(el)])),
+      isGroup,
     };
     editorStore.beginTransaction();
     (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -265,22 +380,36 @@ export function Canvas() {
       }
       const ids = new Set(current.originals.keys());
       const bounds = [...current.originals.values()];
-      const minX = Math.min(...bounds.map((b) => b.x)) + dx;
-      const minY = Math.min(...bounds.map((b) => b.y)) + dy;
-      const maxX = Math.max(...bounds.map((b) => b.x + b.width)) + dx;
-      const maxY = Math.max(...bounds.map((b) => b.y + b.height)) + dy;
+      const baseMinX = Math.min(...bounds.map((b) => b.x));
+      const baseMinY = Math.min(...bounds.map((b) => b.y));
+      const baseMaxX = Math.max(...bounds.map((b) => b.x + b.width));
+      const baseMaxY = Math.max(...bounds.map((b) => b.y + b.height));
+      dx = clamp(dx, -baseMinX, width - baseMaxX);
+      dy = clamp(dy, -baseMinY, height - baseMaxY);
+      const minX = baseMinX + dx;
+      const minY = baseMinY + dy;
+      const maxX = baseMaxX + dx;
+      const maxY = baseMaxY + dy;
       const snap = applySnap(
         { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
         ids,
         snapEnabled,
       );
+      const totalDx = clamp(dx + snap.dx, -baseMinX, width - baseMaxX);
+      const totalDy = clamp(dy + snap.dy, -baseMinY, height - baseMaxY);
+      setMotionInfo({
+        x: Math.round(baseMinX + totalDx),
+        y: Math.round(baseMinY + totalDy),
+        width: Math.round(baseMaxX - baseMinX),
+        height: Math.round(baseMaxY - baseMinY),
+      });
       editorStore.transient((draft) => {
         for (const s of draft.slides) {
           for (const el of s.elements) {
             const origin = current.originals.get(el.id);
             if (!origin) continue;
-            el.x = Math.round(origin.x + dx + snap.dx);
-            el.y = Math.round(origin.y + dy + snap.dy);
+            el.x = Math.round(origin.x + totalDx);
+            el.y = Math.round(origin.y + totalDy);
           }
         }
       });
@@ -306,14 +435,36 @@ export function Canvas() {
       }
       if (handle.includes('s')) next.height = original.height + dy;
 
-      if (e.shiftKey && original.width > 0 && original.height > 0) {
+      if ((current.isGroup || e.shiftKey) && original.width > 0 && original.height > 0) {
         const ratio = original.width / original.height;
-        if (handle === 'e' || handle === 'w') next.height = next.width / ratio;
-        else if (handle === 'n' || handle === 's') next.width = next.height * ratio;
-        else {
-          next.height = next.width / ratio;
-          if (handle.includes('n')) next.y = original.y + original.height - next.height;
+        const scaleX = next.width / original.width;
+        const scaleY = next.height / original.height;
+        let scale =
+          Math.abs(scaleX - 1) >= Math.abs(scaleY - 1) ? scaleX : scaleY;
+
+        if (current.isGroup) {
+          const minScale = Math.max(
+            0.01,
+            ...[...current.originals.values()].flatMap((el) => [
+              MIN_SIZE / el.width,
+              MIN_SIZE / el.height,
+            ]),
+          );
+          const anchorX = handle.includes('w') ? original.x + original.width : original.x;
+          const anchorY = handle.includes('n') ? original.y + original.height : original.y;
+          const maxWidth = handle.includes('w') ? anchorX : width - anchorX;
+          const maxHeight = handle.includes('n') ? anchorY : height - anchorY;
+          scale = clamp(
+            scale,
+            minScale,
+            Math.max(minScale, Math.min(maxWidth / original.width, maxHeight / original.height)),
+          );
         }
+
+        next.width = original.width * scale;
+        next.height = next.width / ratio;
+        next.x = handle.includes('w') ? original.x + original.width - next.width : original.x;
+        next.y = handle.includes('n') ? original.y + original.height - next.height : original.y;
       }
 
       if (next.width < MIN_SIZE) {
@@ -325,7 +476,7 @@ export function Canvas() {
         next.height = MIN_SIZE;
       }
 
-      if (snapEnabled) {
+      if (snapEnabled && !current.isGroup) {
         const snap = applySnap(next, new Set([current.elementId]), true);
         // 只吸附正在移動的那一側，避免整體漂移
         if (handle.includes('w')) next.x += snap.dx;
@@ -336,13 +487,27 @@ export function Canvas() {
         next.height = Math.max(MIN_SIZE, next.height);
       }
 
+      const fitted = fitRectToCanvas(next, width, height);
       const rounded = {
-        x: Math.round(next.x),
-        y: Math.round(next.y),
-        width: Math.round(next.width),
-        height: Math.round(next.height),
+        x: Math.round(fitted.x),
+        y: Math.round(fitted.y),
+        width: Math.round(fitted.width),
+        height: Math.round(fitted.height),
       };
-      editorStore.updateElement(current.elementId, rounded, { transient: true });
+      setMotionInfo(rounded);
+      if (current.isGroup) {
+        editorStore.transient((draft) => {
+          for (const currentSlide of draft.slides) {
+            for (const el of currentSlide.elements) {
+              const source = current.originals.get(el.id);
+              if (!source) continue;
+              Object.assign(el, scaleElementWithinBounds(source, original, rounded));
+            }
+          }
+        });
+      } else {
+        editorStore.updateElement(current.elementId, rounded, { transient: true });
+      }
       return;
     }
 
@@ -359,52 +524,65 @@ export function Canvas() {
   const finishDraw = async (rect: Rect, tool: ToolId) => {
     const presentation = editorStore.getState().presentation;
     const small = rect.width < 8 || rect.height < 8;
-    const box = small
-      ? { x: Math.round(rect.x), y: Math.round(rect.y) }
-      : {
-          x: Math.round(rect.x),
-          y: Math.round(rect.y),
-          width: Math.round(rect.width),
-          height: Math.round(rect.height),
-        };
+    const placement = (defaultWidth: number, defaultHeight: number): Rect => {
+      const preferred = small
+        ? { x: rect.x, y: rect.y, width: defaultWidth, height: defaultHeight }
+        : rect;
+      const fitted = small
+        ? findOpenPlacement(preferred, width, height, slide?.elements ?? [])
+        : fitRectToCanvas(preferred, width, height);
+      return {
+        x: Math.round(fitted.x),
+        y: Math.round(fitted.y),
+        width: Math.round(fitted.width),
+        height: Math.round(fitted.height),
+      };
+    };
 
     switch (tool) {
       case 'text':
-        editorStore.addElement(
-          createTextElement({ ...box, text: '輸入文字', ...(small ? { width: 640, height: 120 } : {}) }),
-        );
+        {
+          const box = placement(640, 120);
+          const el = createTextElement({
+            ...box,
+            text: '',
+          });
+          editorStore.addElement(el);
+          editorStore.setEditingText(el.id);
+        }
         break;
       case 'rect':
-        editorStore.addElement(createRectElement(box));
+        editorStore.addElement(createRectElement(placement(500, 300)));
         break;
       case 'ellipse':
-        editorStore.addElement(createEllipseElement(box));
+        editorStore.addElement(createEllipseElement(placement(360, 240)));
         break;
       case 'line':
-        editorStore.addElement(
-          createLineElement({ ...box, ...(small ? { width: 600, height: 8 } : { height: 8 }) }),
-        );
+        editorStore.addElement(createLineElement({ ...placement(600, 12), height: 8 }));
         break;
       case 'image': {
         const picked = await pickImageFile();
+        if (!picked) {
+          editorStore.toast({
+            tone: 'info',
+            title: '已取消選擇圖片',
+            detail: '畫布不會留下空白圖片框。',
+          });
+          break;
+        }
         editorStore.addElement(
           createImageElement({
-            ...box,
-            ...(small ? { width: 640, height: 400 } : {}),
-            src: picked?.dataUrl ?? '',
-            alt: picked?.name ?? '圖片',
+            ...placement(640, 400),
+            src: picked.dataUrl,
+            alt: picked.name,
           }),
         );
-        if (!picked) {
-          editorStore.toast({ tone: 'info', title: '尚未選擇圖片', detail: '可在右側屬性面板重新選擇。' });
-        }
         break;
       }
       case 'ai_component': {
         const taskId = allocateTaskId(presentation);
         const el = createAiComponentElement({
-          ...box,
-          ...(small ? { width: 900, height: 500 } : {}),
+          ...placement(900, 500),
           taskId,
           kind: 'chart',
           outputFormat: suggestedFormat('chart'),
@@ -427,6 +605,7 @@ export function Canvas() {
     const current = interaction.current;
     interaction.current = null;
     setGuides({ x: [], y: [] });
+    setMotionInfo(null);
 
     if (!current) return;
 
@@ -460,11 +639,27 @@ export function Canvas() {
     (el) => el.id === state.editingTextId && el.type === 'text',
   ) as TextElement | undefined;
 
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  useEffect(() => {
-    if (editing && textareaRef.current) {
-      textareaRef.current.focus();
-      textareaRef.current.select();
+  const editableRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const editable = editableRef.current;
+    if (editing && editable) {
+      editable.innerText = editing.text;
+      editable.focus({ preventScroll: true });
+      const point = pendingTextCaret.current;
+      const selection = window.getSelection();
+      if (selection) {
+        const range = document.createRange();
+        const caret = point ? document.caretPositionFromPoint?.(point.x, point.y) : null;
+        if (caret && editable.contains(caret.offsetNode)) {
+          range.setStart(caret.offsetNode, caret.offset);
+        } else {
+          range.selectNodeContents(editable);
+          range.collapse(false);
+        }
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+      pendingTextCaret.current = null;
       editorStore.beginTransaction();
     }
   }, [editing?.id]);
@@ -478,6 +673,8 @@ export function Canvas() {
   }
 
   const selected = slide.elements.filter((el) => state.selectedIds.includes(el.id));
+  const selectedGroupIds = new Set(selected.flatMap((el) => (el.groupId ? [el.groupId] : [])));
+  const overlapCount = countSelectedOverlaps(slide.elements, state.selectedIds);
   const single = selected.length === 1 ? selected[0] : null;
   const bounds =
     selected.length > 0
@@ -493,29 +690,48 @@ export function Canvas() {
         }
       : null;
 
+  const singleGroupId =
+    selected.length > 1 &&
+    selectedGroupIds.size === 1 &&
+    selected.every((el) => el.groupId === [...selectedGroupIds][0])
+      ? [...selectedGroupIds][0]
+      : null;
+  const singleGroupName = singleGroupId
+    ? selected.find((el) => el.groupId === singleGroupId)?.groupName?.trim() || '未命名群組'
+    : null;
+  const resizeBounds = single
+    ? { x: single.x, y: single.y, width: single.width, height: single.height }
+    : singleGroupId
+      ? bounds
+      : null;
+  const resizeTargets = single ? [single] : singleGroupId ? selected : [];
+
   const handleSize = 9 / zoom;
-  const handles: Array<{ id: Handle; x: number; y: number; cursor: string }> = single
+  const allHandles: Array<{ id: Handle; x: number; y: number; cursor: string }> = resizeBounds
     ? [
-        { id: 'nw', x: single.x, y: single.y, cursor: 'nwse-resize' },
-        { id: 'n', x: single.x + single.width / 2, y: single.y, cursor: 'ns-resize' },
-        { id: 'ne', x: single.x + single.width, y: single.y, cursor: 'nesw-resize' },
-        { id: 'e', x: single.x + single.width, y: single.y + single.height / 2, cursor: 'ew-resize' },
+        { id: 'nw', x: resizeBounds.x, y: resizeBounds.y, cursor: 'nwse-resize' },
+        { id: 'n', x: resizeBounds.x + resizeBounds.width / 2, y: resizeBounds.y, cursor: 'ns-resize' },
+        { id: 'ne', x: resizeBounds.x + resizeBounds.width, y: resizeBounds.y, cursor: 'nesw-resize' },
+        { id: 'e', x: resizeBounds.x + resizeBounds.width, y: resizeBounds.y + resizeBounds.height / 2, cursor: 'ew-resize' },
         {
           id: 'se',
-          x: single.x + single.width,
-          y: single.y + single.height,
+          x: resizeBounds.x + resizeBounds.width,
+          y: resizeBounds.y + resizeBounds.height,
           cursor: 'nwse-resize',
         },
         {
           id: 's',
-          x: single.x + single.width / 2,
-          y: single.y + single.height,
+          x: resizeBounds.x + resizeBounds.width / 2,
+          y: resizeBounds.y + resizeBounds.height,
           cursor: 'ns-resize',
         },
-        { id: 'sw', x: single.x, y: single.y + single.height, cursor: 'nesw-resize' },
-        { id: 'w', x: single.x, y: single.y + single.height / 2, cursor: 'ew-resize' },
+        { id: 'sw', x: resizeBounds.x, y: resizeBounds.y + resizeBounds.height, cursor: 'nesw-resize' },
+        { id: 'w', x: resizeBounds.x, y: resizeBounds.y + resizeBounds.height / 2, cursor: 'ew-resize' },
       ]
     : [];
+  const handles = singleGroupId
+    ? allHandles.filter((handle) => ['nw', 'ne', 'se', 'sw'].includes(handle.id))
+    : allHandles;
 
   return (
     <div
@@ -548,7 +764,10 @@ export function Canvas() {
               onPointerDown={(e) => onElementPointerDown(e, el)}
               onDoubleClick={(e) => {
                 e.stopPropagation();
-                if (el.type === 'text' && !el.locked) editorStore.setEditingText(el.id);
+                if (el.type === 'text' && !el.locked) {
+                  pendingTextCaret.current = { x: e.clientX, y: e.clientY };
+                  editorStore.setEditingText(el.id);
+                }
               }}
               style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
             >
@@ -610,16 +829,95 @@ export function Canvas() {
                 top: bounds.y,
                 width: bounds.width,
                 height: bounds.height,
-                outline: `${1.5 / zoom}px solid var(--color-brand)`,
+                outline: `${1.5 / zoom}px solid ${
+                  overlapCount > 0 ? 'var(--color-danger)' : 'var(--color-brand)'
+                }`,
                 pointerEvents: 'none',
               }}
             />
           )}
 
-          {handles.map((h) => (
+          {bounds && selectedGroupIds.size > 0 && (
             <div
+              className="rounded-md px-2 py-1 font-bold"
+              role="status"
+              style={{
+                position: 'absolute',
+                left: bounds.x,
+                top: Math.max(0, bounds.y - 30 / zoom),
+                transform: `scale(${1 / zoom})`,
+                transformOrigin: 'bottom left',
+                background: 'var(--color-brand)',
+                color: 'var(--color-brand-ink)',
+                fontSize: 11,
+                pointerEvents: 'none',
+                zIndex: 10001,
+              }}
+            >
+              {singleGroupName
+                ? `${singleGroupName} · ${selected.length} 個元件`
+                : `${selectedGroupIds.size} 個群組 · ${selected.length} 個元件`}
+            </div>
+          )}
+
+          {bounds && overlapCount > 0 && (
+            <div
+              className="rounded-md px-2 py-1 font-bold"
+              role="status"
+              style={{
+                position: 'absolute',
+                left: bounds.x,
+                top: Math.min(height - 32 / zoom, bounds.y + bounds.height + 8 / zoom),
+                transform: `scale(${1 / zoom})`,
+                transformOrigin: 'top left',
+                background: 'var(--color-danger)',
+                color: '#fff',
+                fontSize: 11,
+                pointerEvents: 'none',
+                zIndex: 10001,
+              }}
+            >
+              重疊 {overlapCount} 個元件
+            </div>
+          )}
+
+          {motionInfo && (
+            <div
+              className="rounded-md border bg-panel px-2 py-1 font-mono text-[11px] shadow-lg"
+              aria-live="polite"
+              style={{
+                position: 'absolute',
+                left: clamp(
+                  motionInfo.x + motionInfo.width + 10 / zoom,
+                  8 / zoom,
+                  Math.max(8 / zoom, width - 210 / zoom),
+                ),
+                top: clamp(
+                  motionInfo.y + motionInfo.height + 10 / zoom,
+                  8 / zoom,
+                  Math.max(8 / zoom, height - 30 / zoom),
+                ),
+                transform: `scale(${1 / zoom})`,
+                transformOrigin: 'top left',
+                borderColor: 'var(--color-line)',
+                pointerEvents: 'none',
+                zIndex: 10002,
+              }}
+            >
+              X {motionInfo.x}　Y {motionInfo.y}　{motionInfo.width} × {motionInfo.height}
+            </div>
+          )}
+
+          {handles.map((h) => (
+            <button
+              type="button"
               key={h.id}
-              onPointerDown={(e) => single && onHandlePointerDown(e, h.id, single)}
+              aria-label={`縮放${singleGroupName ?? '元件'}（${h.id}）`}
+              data-resize-handle={h.id}
+              onPointerDown={(e) =>
+                resizeBounds &&
+                onHandlePointerDown(e, h.id, resizeTargets, resizeBounds, Boolean(singleGroupId))
+              }
               style={{
                 position: 'absolute',
                 left: h.x - handleSize / 2,
@@ -629,11 +927,103 @@ export function Canvas() {
                 background: '#fff',
                 border: `${1.5 / zoom}px solid var(--color-brand)`,
                 borderRadius: 2 / zoom,
+                padding: 0,
                 cursor: h.cursor,
-                pointerEvents: single?.locked ? 'none' : 'auto',
+                pointerEvents: resizeTargets.some((el) => el.locked) ? 'none' : 'auto',
               }}
             />
           ))}
+
+          {/* 選取文字後就近顯示常用工具，不用一直移到右側面板 */}
+          {single?.type === 'text' && !single.locked && !editing && (
+            <div
+              className="panel-card flex items-center gap-1 p-1.5 shadow-xl"
+              aria-label="文字快速工具列"
+              onPointerDown={(e) => e.stopPropagation()}
+              style={{
+                position: 'absolute',
+                left: Math.max(8 / zoom, single.x),
+                top: Math.max(8 / zoom, single.y - 50 / zoom),
+                transform: `scale(${1 / zoom})`,
+                transformOrigin: 'top left',
+                zIndex: 10000,
+              }}
+            >
+              <label className="flex items-center gap-1 px-1 text-[11px] text-ink-3">
+                字級
+                <input
+                  type="number"
+                  aria-label="浮動字級"
+                  className="field-input h-7 w-16 px-2 py-0 text-[12px]"
+                  min={1}
+                  value={single.fontSize}
+                  onFocus={() => editorStore.beginTransaction()}
+                  onChange={(e) => {
+                    const fontSize = Number(e.target.value);
+                    if (Number.isFinite(fontSize) && fontSize > 0) {
+                      editorStore.updateElement(single.id, { fontSize }, { transient: true });
+                    }
+                  }}
+                  onBlur={() => editorStore.endTransaction()}
+                />
+              </label>
+              <span className="mx-0.5 h-5 w-px bg-line" />
+              {(
+                [
+                  ['bold', 'B', single.bold],
+                  ['italic', 'I', single.italic],
+                  ['underline', 'U', single.underline],
+                ] as const
+              ).map(([property, label, active]) => (
+                <button
+                  key={property}
+                  type="button"
+                  className="tool-btn h-7 w-7 justify-center px-0 font-bold"
+                  data-active={active}
+                  aria-label={property === 'bold' ? '粗體' : property === 'italic' ? '斜體' : '底線'}
+                  onClick={() => editorStore.updateElement(single.id, { [property]: !active })}
+                >
+                  {label}
+                </button>
+              ))}
+              <span className="mx-0.5 h-5 w-px bg-line" />
+              {(
+                [
+                  ['left', 'align-left', '靠左對齊'],
+                  ['center', 'align-center-x', '置中對齊'],
+                  ['right', 'align-right', '靠右對齊'],
+                ] as const
+              ).map(([align, icon, label]) => (
+                <button
+                  key={align}
+                  type="button"
+                  className="tool-btn h-7 w-7 justify-center px-0"
+                  data-active={single.align === align}
+                  aria-label={label}
+                  onClick={() => editorStore.updateElement(single.id, { align })}
+                >
+                  <Icon name={icon} size={14} />
+                </button>
+              ))}
+              <label
+                className="ml-0.5 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border"
+                style={{ borderColor: 'var(--color-line)' }}
+                title="文字顏色"
+              >
+                <span
+                  className="h-4 w-4 rounded-full border"
+                  style={{ background: single.color, borderColor: 'var(--color-line)' }}
+                />
+                <input
+                  type="color"
+                  aria-label="文字顏色"
+                  className="sr-only"
+                  value={single.color}
+                  onChange={(e) => editorStore.updateElement(single.id, { color: e.target.value })}
+                />
+              </label>
+            </div>
+          )}
 
           {/* 框選 */}
           {marquee && (
@@ -669,11 +1059,20 @@ export function Canvas() {
 
           {/* 文字直接編輯 */}
           {editing && (
-            <textarea
-              ref={textareaRef}
-              defaultValue={editing.text}
-              onChange={(e) =>
-                editorStore.updateElement(editing.id, { text: e.target.value }, { transient: true })
+            <div
+              ref={editableRef}
+              contentEditable
+              suppressContentEditableWarning
+              role="textbox"
+              aria-label="直接編輯文字"
+              aria-multiline="true"
+              data-placeholder="輸入文字"
+              onInput={(e) =>
+                editorStore.updateElement(
+                  editing.id,
+                  { text: e.currentTarget.innerText.replace(/\r\n?/g, '\n') },
+                  { transient: true },
+                )
               }
               onBlur={() => {
                 editorStore.endTransaction();
@@ -704,7 +1103,10 @@ export function Canvas() {
                 outline: 'none',
                 resize: 'none',
                 padding: 0,
-                fontFamily: 'inherit',
+                fontFamily: editing.fontFamily,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                overflow: 'hidden',
               }}
             />
           )}

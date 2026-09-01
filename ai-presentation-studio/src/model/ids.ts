@@ -31,6 +31,10 @@ export function newElementId(kind: string): string {
   return newId(`el-${kind}`);
 }
 
+export function newGroupId(): string {
+  return newId('group');
+}
+
 /** AI Task 使用人類可讀的序號格式 TASK-001，並確保不與既有 ID 衝突。 */
 export function nextTaskId(existing: Iterable<string>): string {
   let max = 0;

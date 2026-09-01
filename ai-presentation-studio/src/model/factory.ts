@@ -67,26 +67,34 @@ function nextZ(elements: SlideElement[]): number {
 
 interface BaseInit {
   id?: string;
+  groupId?: string;
+  groupName?: string;
   x?: number;
   y?: number;
   width?: number;
   height?: number;
   z?: number;
   name?: string;
+  rotation?: number;
+  opacity?: number;
+  locked?: boolean;
+  hidden?: boolean;
 }
 
 function base(kind: string, init: BaseInit, w: number, h: number) {
   return {
     id: init.id ?? newElementId(kind),
     name: init.name,
+    ...(init.groupId ? { groupId: init.groupId } : {}),
+    ...(init.groupName ? { groupName: init.groupName } : {}),
     x: init.x ?? 160,
     y: init.y ?? 160,
     width: init.width ?? w,
     height: init.height ?? h,
-    rotation: 0,
-    opacity: 1,
-    locked: false,
-    hidden: false,
+    rotation: init.rotation ?? 0,
+    opacity: init.opacity ?? 1,
+    locked: init.locked ?? false,
+    hidden: init.hidden ?? false,
     z: init.z ?? 1,
   };
 }

@@ -187,6 +187,33 @@ export function TopBar() {
         ]}
       />
 
+      <div
+        className="mx-1 flex items-center gap-0.5 border-l pl-2"
+        style={{ borderColor: 'var(--color-line)' }}
+        aria-label="復原與重作"
+      >
+        <button
+          type="button"
+          className="tool-btn justify-center px-2"
+          aria-label="復原"
+          title="復原（Ctrl+Z）"
+          disabled={!state.canUndo}
+          onClick={() => editorStore.undo()}
+        >
+          <Icon name="undo" size={16} />
+        </button>
+        <button
+          type="button"
+          className="tool-btn justify-center px-2"
+          aria-label="重作"
+          title="重作（Ctrl+Shift+Z）"
+          disabled={!state.canRedo}
+          onClick={() => editorStore.redo()}
+        >
+          <Icon name="redo" size={16} />
+        </button>
+      </div>
+
       <Menu
         label="檢視"
         items={[

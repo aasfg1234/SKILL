@@ -8,6 +8,7 @@ import {
   topZ,
 } from '../model/factory';
 import { createDemoPresentation } from '../model/demo';
+import { newGroupId, nextTaskId } from '../model/ids';
 import { applyPatch, mergeCompletedPresentation, type MergeSummary } from '../model/patch';
 import type {
   Presentation,
@@ -427,10 +428,109 @@ class EditorStore {
   /* ---------------------------------------------------------------- */
 
   select(ids: string[], additive = false): void {
+    const expanded = this.expandGroupIds(ids);
     const next = additive
-      ? [...new Set([...this.state.selectedIds, ...ids])]
-      : ids;
+      ? [...new Set([...this.state.selectedIds, ...expanded])]
+      : expanded;
     this.set({ selectedIds: next, editingTextId: null });
+  }
+
+  /** 點選群組成員時，選取或取消整個群組。回傳拖曳應使用的完整選取清單。 */
+  selectElement(elementId: string, additive = false): string[] {
+    const members = this.expandGroupIds([elementId]);
+    let next = members;
+    if (additive) {
+      const memberSet = new Set(members);
+      const allSelected = members.every((id) => this.state.selectedIds.includes(id));
+      next = allSelected
+        ? this.state.selectedIds.filter((id) => !memberSet.has(id))
+        : [...new Set([...this.state.selectedIds, ...members])];
+    }
+    this.set({ selectedIds: next, editingTextId: null });
+    return next;
+  }
+
+  private expandGroupIds(ids: string[]): string[] {
+    const slide = this.currentSlide;
+    if (!slide) return [];
+    const requested = new Set(ids);
+    const groupIds = new Set(
+      slide.elements
+        .filter((el) => requested.has(el.id) && el.groupId)
+        .map((el) => el.groupId as string),
+    );
+    return slide.elements
+      .filter((el) => requested.has(el.id) || (el.groupId && groupIds.has(el.groupId)))
+      .map((el) => el.id);
+  }
+
+  groupSelected(): void {
+    const selected = this.selectedElements();
+    if (selected.length < 2) {
+      this.toast({ tone: 'info', title: '至少選取兩個元件才能建立群組' });
+      return;
+    }
+    if (selected.some((el) => el.locked)) {
+      this.toast({ tone: 'warning', title: '鎖定的元件不能加入群組' });
+      return;
+    }
+    const ids = new Set(selected.map((el) => el.id));
+    const groupId = newGroupId();
+    const usedNames = new Set(
+      (this.currentSlide?.elements ?? []).flatMap((el) => (el.groupName ? [el.groupName] : [])),
+    );
+    let groupNumber = 1;
+    while (usedNames.has(`群組 ${groupNumber}`)) groupNumber += 1;
+    const groupName = `群組 ${groupNumber}`;
+    this.commit((draft) => {
+      const slide = draft.slides.find((item) => item.id === this.state.currentSlideId);
+      if (!slide) return;
+      for (const el of slide.elements) {
+        if (ids.has(el.id)) {
+          el.groupId = groupId;
+          el.groupName = groupName;
+        }
+      }
+    });
+    this.set({ selectedIds: selected.map((el) => el.id), editingTextId: null });
+    this.toast({ tone: 'success', title: `已建立群組，共 ${selected.length} 個元件` });
+  }
+
+  ungroupSelected(): void {
+    const groupIds = new Set(
+      this.selectedElements().flatMap((el) => (el.groupId ? [el.groupId] : [])),
+    );
+    if (groupIds.size === 0) {
+      this.toast({ tone: 'info', title: '選取內容沒有群組' });
+      return;
+    }
+    this.commit((draft) => {
+      const slide = draft.slides.find((item) => item.id === this.state.currentSlideId);
+      if (!slide) return;
+      for (const el of slide.elements) {
+        if (el.groupId && groupIds.has(el.groupId)) {
+          delete el.groupId;
+          delete el.groupName;
+        }
+      }
+    });
+    this.toast({ tone: 'success', title: `已取消 ${groupIds.size} 個群組` });
+  }
+
+  renameGroup(
+    groupId: string,
+    name: string,
+    options: { transient?: boolean } = {},
+  ): void {
+    const recipe = (draft: Presentation) => {
+      const slide = draft.slides.find((item) => item.id === this.state.currentSlideId);
+      if (!slide) return;
+      for (const el of slide.elements) {
+        if (el.groupId === groupId) el.groupName = name;
+      }
+    };
+    if (options.transient) this.transient(recipe);
+    else this.commit(recipe);
   }
 
   clearSelection(): void {
@@ -497,7 +597,7 @@ class EditorStore {
   duplicateSelected(): void {
     const source = this.selectedElements();
     if (source.length === 0) return;
-    const copies = source.map((el) => cloneElement(el, this.state.presentation));
+    const copies = this.cloneElementsAsSet(source);
     this.commit((draft) => {
       const slide = draft.slides.find((s) => s.id === this.state.currentSlideId);
       if (!slide) return;
@@ -518,7 +618,7 @@ class EditorStore {
 
   paste(): void {
     if (this.clipboard.length === 0) return;
-    const copies = this.clipboard.map((el) => cloneElement(el, this.state.presentation));
+    const copies = this.cloneElementsAsSet(this.clipboard);
     this.commit((draft) => {
       const slide = draft.slides.find((s) => s.id === this.state.currentSlideId);
       if (!slide) return;
@@ -526,6 +626,35 @@ class EditorStore {
       for (const copy of copies) slide.elements.push({ ...copy, z: z++ });
     });
     this.set({ selectedIds: copies.map((c) => c.id) });
+  }
+
+  /** 複製整批元素時，保留批次內的群組關係，但不連到原本群組。 */
+  private cloneElementsAsSet(source: SlideElement[]): SlideElement[] {
+    const groupMap = new Map<string, { id: string; name: string }>();
+    const usedTaskIds = new Set(this.state.presentation.aiTasks.map((task) => task.id));
+    return source.map((el) => {
+      const copy = cloneElement(el, this.state.presentation);
+      if (el.groupId) {
+        let nextGroup = groupMap.get(el.groupId);
+        if (!nextGroup) {
+          nextGroup = {
+            id: newGroupId(),
+            name: `${el.groupName?.trim() || '未命名群組'}（複本）`,
+          };
+          groupMap.set(el.groupId, nextGroup);
+        }
+        copy.groupId = nextGroup.id;
+        copy.groupName = nextGroup.name;
+      } else {
+        delete copy.groupId;
+        delete copy.groupName;
+      }
+      if (copy.type === 'ai_component') {
+        copy.taskId = nextTaskId(usedTaskIds);
+        usedTaskIds.add(copy.taskId);
+      }
+      return copy;
+    });
   }
 
   nudge(dx: number, dy: number): void {
@@ -617,6 +746,69 @@ class EditorStore {
         }
       }
     });
+  }
+
+  distribute(axis: 'horizontal' | 'vertical'): void {
+    const ids = new Set(this.state.selectedIds);
+    const selected = this.selectedElements().filter((el) => !el.locked);
+    if (selected.length < 3) {
+      this.toast({ tone: 'info', title: '至少選取三個元件才能平均分布' });
+      return;
+    }
+
+    const ordered = [...selected].sort((a, b) =>
+      axis === 'horizontal' ? a.x - b.x || a.z - b.z : a.y - b.y || a.z - b.z,
+    );
+    const start = axis === 'horizontal' ? ordered[0].x : ordered[0].y;
+    const last = ordered.at(-1)!;
+    const end =
+      axis === 'horizontal' ? last.x + last.width : last.y + last.height;
+    const occupied = ordered.reduce(
+      (sum, el) => sum + (axis === 'horizontal' ? el.width : el.height),
+      0,
+    );
+    const availableGap = (end - start - occupied) / (ordered.length - 1);
+
+    this.commit((draft) => {
+      const slide = draft.slides.find((item) => item.id === this.state.currentSlideId);
+      if (!slide) return;
+      const items = slide.elements
+        .filter((el) => ids.has(el.id) && !el.locked)
+        .sort((a, b) =>
+          axis === 'horizontal' ? a.x - b.x || a.z - b.z : a.y - b.y || a.z - b.z,
+        );
+      if (items.length < 3) return;
+
+      if (axis === 'horizontal') {
+        const start = items[0].x;
+        const end = items.at(-1)!.x + items.at(-1)!.width;
+        const occupied = items.reduce((sum, el) => sum + el.width, 0);
+        const gap = (end - start - occupied) / (items.length - 1);
+        let cursor = start;
+        for (const el of items) {
+          el.x = Math.round(cursor);
+          cursor += el.width + gap;
+        }
+      } else {
+        const start = items[0].y;
+        const end = items.at(-1)!.y + items.at(-1)!.height;
+        const occupied = items.reduce((sum, el) => sum + el.height, 0);
+        const gap = (end - start - occupied) / (items.length - 1);
+        let cursor = start;
+        for (const el of items) {
+          el.y = Math.round(cursor);
+          cursor += el.height + gap;
+        }
+      }
+    });
+
+    if (availableGap < 0) {
+      this.toast({
+        tone: 'warning',
+        title: '選取範圍空間不足',
+        detail: '元件已平均分布，但仍會互相重疊。請先拉開最前與最後的元件。',
+      });
+    }
   }
 
   selectedElements(): SlideElement[] {

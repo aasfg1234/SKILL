@@ -37,6 +37,8 @@ const PATHS: Record<string, string> = {
   file: 'M6 3h8l4 4v14H6zM14 3v5h4',
   grid: 'M4 4h16v16H4zM4 10h16M4 16h16M10 4v16M16 4v16',
   layers: 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5',
+  group: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6zM10 7h4M7 10v4M17 10v4M10 17h4',
+  ungroup: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6zM11 7h2M7 11v2M17 11v2M11 17h2',
   settings: 'M12 9a3 3 0 100 6 3 3 0 000-6zM19 12l2-1-2-4-2 .6a7 7 0 00-2-1.2L14.5 4h-5L9 5.4a7 7 0 00-2 1.2L5 6 3 10l2 1v2l-2 1 2 4 2-.6a7 7 0 002 1.2l.5 2.4h5l.5-2.4a7 7 0 002-1.2l2 .6 2-4-2-1z',
   'zoom-in': 'M11 4a7 7 0 100 14 7 7 0 000-14zM20 20l-3.5-3.5M11 8v6M8 11h6',
   'zoom-out': 'M11 4a7 7 0 100 14 7 7 0 000-14zM20 20l-3.5-3.5M8 11h6',

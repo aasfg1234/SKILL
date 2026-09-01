@@ -83,7 +83,7 @@ export function SlideList() {
             >
               <div className="mb-1 flex items-center justify-between">
                 <span className="text-[11px] font-bold text-ink-2">{index + 1}</span>
-                <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
+                <div className="pointer-events-none flex items-center gap-0.5 opacity-0 transition group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
                   <button
                     type="button"
                     className="tool-btn px-1 py-0.5"

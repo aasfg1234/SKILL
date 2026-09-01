@@ -89,6 +89,33 @@ describe('編輯器 Store', () => {
     expect(find()?.x).toBe(0);
   });
 
+  it('連續文字輸入只產生一個復原點', () => {
+    editorStore.addElement(
+      createTextElement({ id: 'el-text-edit', text: '原始文字' }),
+      'slide-01',
+    );
+
+    editorStore.beginTransaction();
+    editorStore.updateElement('el-text-edit', { text: '原始文字 A' }, { transient: true });
+    editorStore.updateElement('el-text-edit', { text: '原始文字 AB' }, { transient: true });
+    editorStore.updateElement('el-text-edit', { text: '原始文字 ABC' }, { transient: true });
+    editorStore.endTransaction();
+
+    const findText = () => {
+      const el = editorStore
+        .getState()
+        .presentation.slides.find((s) => s.id === 'slide-01')
+        ?.elements.find((item) => item.id === 'el-text-edit');
+      return el?.type === 'text' ? el.text : undefined;
+    };
+
+    expect(findText()).toBe('原始文字 ABC');
+    editorStore.undo();
+    expect(findText()).toBe('原始文字');
+    editorStore.redo();
+    expect(findText()).toBe('原始文字 ABC');
+  });
+
   it('鎖定的元素不會被刪除或修改', () => {
     editorStore.addElement(createRectElement({ id: 'el-locked' }), 'slide-01');
     editorStore.select(['el-locked']);
@@ -167,5 +194,186 @@ describe('編輯器 Store', () => {
       .getState()
       .presentation.slides[0].elements.find((e) => e.id === 'el-align')!;
     expect(el.x).toBe((1920 - 200) / 2);
+  });
+
+  it('三個元件可以水平與垂直等距排列', () => {
+    const items = [
+      createRectElement({ id: 'dist-a', x: 100, y: 100, width: 100, height: 100 }),
+      createRectElement({ id: 'dist-b', x: 280, y: 260, width: 100, height: 100 }),
+      createRectElement({ id: 'dist-c', x: 700, y: 700, width: 100, height: 100 }),
+    ];
+    for (const item of items) editorStore.addElement(item, 'slide-01');
+    editorStore.select(items.map((item) => item.id));
+
+    editorStore.distribute('horizontal');
+    let current = editorStore
+      .getState()
+      .presentation.slides[0].elements.filter((el) => items.some((item) => item.id === el.id));
+    current = [...current].sort((a, b) => a.x - b.x);
+    expect(current[1].x - (current[0].x + current[0].width)).toBe(200);
+    expect(current[2].x - (current[1].x + current[1].width)).toBe(200);
+
+    editorStore.distribute('vertical');
+    current = editorStore
+      .getState()
+      .presentation.slides[0].elements.filter((el) => items.some((item) => item.id === el.id));
+    current = [...current].sort((a, b) => a.y - b.y);
+    expect(current[1].y - (current[0].y + current[0].height)).toBe(200);
+    expect(current[2].y - (current[1].y + current[1].height)).toBe(200);
+  });
+
+  it('等距排列空間不足時會顯示警告', () => {
+    const items = [
+      createRectElement({ id: 'wide-a', x: 0, width: 900 }),
+      createRectElement({ id: 'wide-b', x: 500, width: 900 }),
+      createRectElement({ id: 'wide-c', x: 1020, width: 900 }),
+    ];
+    for (const item of items) editorStore.addElement(item, 'slide-01');
+    editorStore.select(items.map((item) => item.id));
+
+    editorStore.distribute('horizontal');
+
+    expect(
+      editorStore.getState().toasts.some((toast) => toast.title === '選取範圍空間不足'),
+    ).toBe(true);
+  });
+
+  it('建立群組後，點一個成員會選到整組並一起移動', () => {
+    const items = [
+      createRectElement({ id: 'group-a', x: 100, y: 120 }),
+      createRectElement({ id: 'group-b', x: 700, y: 320 }),
+    ];
+    for (const item of items) editorStore.addElement(item, 'slide-01');
+    editorStore.select(items.map((item) => item.id));
+    editorStore.groupSelected();
+
+    const grouped = editorStore
+      .getState()
+      .presentation.slides[0].elements.filter((el) => items.some((item) => item.id === el.id));
+    expect(grouped[0].groupId).toBeTruthy();
+    expect(grouped[1].groupId).toBe(grouped[0].groupId);
+
+    editorStore.clearSelection();
+    editorStore.selectElement('group-a');
+    expect(editorStore.getState().selectedIds).toEqual(['group-a', 'group-b']);
+    editorStore.nudge(15, 25);
+
+    const moved = editorStore
+      .getState()
+      .presentation.slides[0].elements.filter((el) => items.some((item) => item.id === el.id));
+    expect(moved.map((el) => [el.x, el.y])).toEqual([
+      [115, 145],
+      [715, 345],
+    ]);
+  });
+
+  it('群組建立與取消都支援復原及重做', () => {
+    const items = [
+      createTextElement({ id: 'undo-group-a', text: '甲' }),
+      createTextElement({ id: 'undo-group-b', text: '乙' }),
+    ];
+    for (const item of items) editorStore.addElement(item, 'slide-01');
+    editorStore.select(items.map((item) => item.id));
+    editorStore.groupSelected();
+    const groupId = editorStore.selectedElements()[0].groupId;
+
+    editorStore.undo();
+    expect(editorStore.selectedElements().every((el) => !el.groupId)).toBe(true);
+    editorStore.redo();
+    expect(editorStore.selectedElements().every((el) => el.groupId === groupId)).toBe(true);
+
+    editorStore.ungroupSelected();
+    expect(editorStore.selectedElements().every((el) => !el.groupId)).toBe(true);
+    editorStore.undo();
+    expect(editorStore.selectedElements().every((el) => el.groupId === groupId)).toBe(true);
+  });
+
+  it('複製群組會建立新的群組，不會連到原本群組', () => {
+    const items = [
+      createRectElement({ id: 'copy-group-a' }),
+      createRectElement({ id: 'copy-group-b' }),
+    ];
+    for (const item of items) editorStore.addElement(item, 'slide-01');
+    editorStore.select(items.map((item) => item.id));
+    editorStore.groupSelected();
+    const originalGroupId = editorStore.selectedElements()[0].groupId;
+    const originalGroupName = editorStore.selectedElements()[0].groupName;
+
+    editorStore.duplicateSelected();
+    const copies = editorStore.selectedElements();
+    expect(copies).toHaveLength(2);
+    expect(copies[0].groupId).toBeTruthy();
+    expect(copies[1].groupId).toBe(copies[0].groupId);
+    expect(copies[0].groupId).not.toBe(originalGroupId);
+    expect(copies[0].groupName).toBe(`${originalGroupName}（複本）`);
+  });
+
+  it('修改群組名稱只產生一個復原點', () => {
+    const items = [
+      createRectElement({ id: 'rename-group-a' }),
+      createRectElement({ id: 'rename-group-b' }),
+    ];
+    for (const item of items) editorStore.addElement(item, 'slide-01');
+    editorStore.select(items.map((item) => item.id));
+    editorStore.groupSelected();
+    const groupId = editorStore.selectedElements()[0].groupId!;
+    const originalName = editorStore.selectedElements()[0].groupName;
+
+    editorStore.beginTransaction();
+    editorStore.renameGroup(groupId, '首', { transient: true });
+    editorStore.renameGroup(groupId, '首頁', { transient: true });
+    editorStore.renameGroup(groupId, '首頁標題', { transient: true });
+    editorStore.endTransaction();
+
+    expect(editorStore.selectedElements().every((el) => el.groupName === '首頁標題')).toBe(true);
+    editorStore.undo();
+    expect(editorStore.selectedElements().every((el) => el.groupName === originalName)).toBe(true);
+  });
+
+  it('群組命名與縮放經過預覽後仍可完整復原', () => {
+    const first = createRectElement({ id: 'flow-group-a', x: 100, y: 100, width: 200, height: 100 });
+    const second = createRectElement({ id: 'flow-group-b', x: 400, y: 250, width: 300, height: 150 });
+    const presentation = createDemoPresentation();
+    presentation.slides[0].elements = [first, second];
+    editorStore.replacePresentation(presentation, { resetHistory: true });
+    editorStore.selectSlide('slide-01');
+    editorStore.select([first.id, second.id]);
+    editorStore.groupSelected();
+    const groupId = editorStore.selectedElements()[0].groupId!;
+
+    editorStore.beginTransaction();
+    editorStore.renameGroup(groupId, '流程群組', { transient: true });
+    editorStore.endTransaction();
+    editorStore.beginTransaction();
+    editorStore.transient((draft) => {
+      for (const el of draft.slides[0].elements) {
+        el.width *= 2;
+        el.height *= 2;
+      }
+    });
+    editorStore.endTransaction();
+    editorStore.enterPreview();
+    editorStore.exitPreview();
+
+    editorStore.undo();
+    expect(editorStore.selectedElements().map((el) => el.width)).toEqual([200, 300]);
+    editorStore.undo();
+    expect(editorStore.selectedElements().every((el) => el.groupName === '群組 1')).toBe(true);
+    editorStore.undo();
+    expect(editorStore.selectedElements().every((el) => !el.groupId)).toBe(true);
+  });
+
+  it('鎖定的元件不會被加入群組', () => {
+    const unlocked = createRectElement({ id: 'group-unlocked' });
+    const locked = createRectElement({ id: 'group-locked', locked: true });
+    editorStore.addElement(unlocked, 'slide-01');
+    editorStore.addElement(locked, 'slide-01');
+    editorStore.select([unlocked.id, locked.id]);
+    editorStore.groupSelected();
+
+    expect(editorStore.selectedElements().every((el) => !el.groupId)).toBe(true);
+    expect(
+      editorStore.getState().toasts.some((toast) => toast.title === '鎖定的元件不能加入群組'),
+    ).toBe(true);
   });
 });

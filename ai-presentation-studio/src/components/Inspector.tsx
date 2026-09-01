@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { editorStore, useEditorState } from '../store/editorStore';
 import type { AIComponentKind, AIOutputFormat, SlideElement } from '../model/types';
 import {
@@ -193,6 +193,12 @@ function SlideInspector() {
 }
 
 function AiSettings({ el }: { el: Extract<SlideElement, { type: 'ai_component' }> }) {
+  const promptRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (!el.prompt.trim()) promptRef.current?.focus();
+  }, [el.id]);
+
   const statusColor =
     el.status === 'completed'
       ? 'var(--color-ok)'
@@ -237,10 +243,15 @@ function AiSettings({ el }: { el: Extract<SlideElement, { type: 'ai_component' }
 
       <Field label="Prompt（要 AI 生成什麼）">
         <textarea
+          ref={promptRef}
           className="field-input min-h-[104px] resize-y leading-relaxed"
           value={el.prompt}
           placeholder="例如：製作 2024～2026 營收成長圖，使用專業企業簡報風格。"
-          onChange={(e) => editorStore.updateElement(el.id, { prompt: e.target.value })}
+          onFocus={() => editorStore.beginTransaction()}
+          onChange={(e) =>
+            editorStore.updateElement(el.id, { prompt: e.target.value }, { transient: true })
+          }
+          onBlur={() => editorStore.endTransaction()}
         />
       </Field>
 
@@ -444,7 +455,11 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
             <textarea
               className="field-input min-h-[72px] resize-y"
               value={el.text}
-              onChange={(e) => update({ text: e.target.value })}
+              onFocus={() => editorStore.beginTransaction()}
+              onChange={(e) =>
+                editorStore.updateElement(el.id, { text: e.target.value }, { transient: true })
+              }
+              onBlur={() => editorStore.endTransaction()}
             />
           </Field>
           <div className="grid grid-cols-2 gap-2">

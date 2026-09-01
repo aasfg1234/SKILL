@@ -24,7 +24,7 @@ HTML         = Compiled Output
       → 匯入 → HTML Renderer → final-presentation.html
 ```
 
-## 啟動方式
+## 開發模式
 
 需求：Node.js 20 以上（開發環境使用 Node 22）。
 
@@ -34,17 +34,35 @@ npm install
 npm run dev        # 開發模式，預設 http://localhost:5173
 ```
 
+開發模式使用 Vite 開發伺服器。修改程式後，瀏覽器會自動更新，並保留完整錯誤訊息。開發模式不會載入單檔套件，也不會執行單檔整理工具。
+
+## 交付模式（免佈署單檔）
+
+```bash
+npm run build
+```
+
+完成後只會產生：
+
+```text
+dist/AI-Presentation-Studio.html
+```
+
+正式建置才會載入單檔套件。建置完成後，整理工具會檢查 JavaScript、CSS、圖示與外部資源，再清除其他建置檔案。
+
+把這個檔案複製到任何資料夾，再直接雙擊即可使用。CSS、JavaScript 與圖示都已放進同一個 HTML 檔，不需要安裝程式、不需要啟動伺服器，也不需要網路。
+
 其他指令：
 
 ```bash
-npm run build      # 型別檢查 + 產生 dist/
+npm run build      # 型別檢查 + 產生免佈署單檔 HTML
 npm run preview    # 以靜態方式預覽 dist/（http://localhost:4173）
-npm test           # 執行 55 項單元／整合測試
+npm test           # 執行 69 項單元／整合測試
 npm run typecheck  # 只做型別檢查
 ```
 
-建置後的 `dist/` 是純靜態檔案，可直接用任何靜態伺服器開啟；
-不需要後端、資料庫、登入或任何雲端服務。所有資料都存在瀏覽器的 localStorage。
+建置後的 `dist/AI-Presentation-Studio.html` 可直接雙擊開啟；
+不需要伺服器、後端、資料庫、登入或任何雲端服務。所有資料都存在瀏覽器的 localStorage。
 
 ## 專案結構
 

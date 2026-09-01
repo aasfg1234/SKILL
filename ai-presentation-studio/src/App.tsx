@@ -71,6 +71,12 @@ function useGlobalShortcuts() {
         editorStore.select((slide?.elements ?? []).map((el) => el.id));
         return;
       }
+      if (mod && e.key.toLowerCase() === 'g') {
+        e.preventDefault();
+        if (e.shiftKey) editorStore.ungroupSelected();
+        else editorStore.groupSelected();
+        return;
+      }
 
       switch (e.key) {
         case 'Delete':

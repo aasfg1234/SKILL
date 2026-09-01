@@ -120,6 +120,25 @@ export function validatePresentation(presentation: Presentation): ValidationRepo
       elementIds.add(el.id);
       elementSlide.set(el.id, slide.id);
 
+      if (el.groupId !== undefined && (typeof el.groupId !== 'string' || !el.groupId.trim())) {
+        issues.push({
+          code: 'INVALID_GROUP_ID',
+          severity: 'error',
+          message: `元素 ${el.id} 的群組 ID 不合法`,
+          slideId: slide.id,
+          elementId: el.id,
+        });
+      }
+      if (el.groupName !== undefined && typeof el.groupName !== 'string') {
+        issues.push({
+          code: 'INVALID_GROUP_NAME',
+          severity: 'error',
+          message: `元素 ${el.id} 的群組名稱不合法`,
+          slideId: slide.id,
+          elementId: el.id,
+        });
+      }
+
       if (!(el.width > 0) || !(el.height > 0)) {
         report.validation.invalidSize += 1;
         issues.push({

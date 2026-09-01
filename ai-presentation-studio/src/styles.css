@@ -117,6 +117,12 @@ textarea {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 18%, transparent);
 }
 
+[contenteditable='true'][data-placeholder]:empty::before {
+  color: var(--color-ink-3);
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
 @utility tool-btn {
   display: inline-flex;
   align-items: center;

@@ -311,6 +311,8 @@ const SHORTCUTS: Array<[string, string]> = [
   ['Ctrl + S', '儲存'],
   ['Ctrl + C / Ctrl + V', '複製 / 貼上'],
   ['Ctrl + D', '再製'],
+  ['Ctrl + G', '建立群組'],
+  ['Ctrl + Shift + G', '取消群組'],
   ['Ctrl + 0', '符合視窗'],
   ['Delete / Backspace', '刪除選取元素'],
   ['← ↑ ↓ →', '移動元素 1px'],
