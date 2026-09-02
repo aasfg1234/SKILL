@@ -103,6 +103,7 @@ export function PreviewOverlay() {
             transformOrigin: 'center center',
             position: 'relative',
             background: slide.background,
+            fontFamily: state.presentation.theme.fontFamily,
             flex: '0 0 auto',
           }}
         >

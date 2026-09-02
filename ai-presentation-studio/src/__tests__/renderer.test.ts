@@ -70,6 +70,16 @@ describe('HTML Renderer', () => {
     expect(doneHtml).toContain(`left:${el!.x}px;top:${el!.y}px;width:${el!.width}px;height:${el!.height}px`);
   });
 
+  it('匯出的 HTML 以拉丁字型開頭，換系統開啟才不會跑版', () => {
+    // 中文字在各家字型都是等寬的；會讓版面跑掉的是英文與數字。
+    // 只要英文固定成各系統都有的 Arial，整行寬度就固定。
+    const fontLine = html.split('\n').find((line) => line.includes('font-family:'));
+
+    expect(fontLine).toBeDefined();
+    expect(fontLine).toContain('Arial');
+    expect(fontLine!.indexOf('Arial')).toBeLessThan(fontLine!.indexOf('Microsoft JhengHei'));
+  });
+
   it('Renderer 不依賴 React', async () => {
     const fs = await import('node:fs/promises');
     const source = await fs.readFile('src/renderer/renderHtml.ts', 'utf-8');

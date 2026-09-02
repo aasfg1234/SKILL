@@ -1139,6 +1139,7 @@ export function Canvas() {
             transform: `scale(${zoom})`,
             transformOrigin: 'center center',
             background: slide.background,
+            fontFamily: state.presentation.theme.fontFamily,
             cursor: state.tool === 'select' ? 'default' : 'crosshair',
             flex: '0 0 auto',
             margin: `${(height * zoom - height) / 2}px ${(width * zoom - width) / 2}px`,

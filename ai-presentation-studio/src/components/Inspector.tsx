@@ -20,6 +20,7 @@ import {
   removeTableColumn,
   removeTableRow,
 } from '../model/table';
+import { FONT_CHOICES, fontIdOfStack, fontStackOf } from '../lib/fonts';
 
 /** 右側屬性面板：位置、大小、樣式與 AI 設定。 */
 
@@ -126,6 +127,37 @@ function ToggleButton({
     <button type="button" className="tool-btn flex-1 justify-center" data-active={active} onClick={onClick} title={title}>
       {children}
     </button>
+  );
+}
+
+/**
+ * 字型選單。
+ *
+ * 只提供各系統都有、而且尺寸一致的組合，換一台電腦開也不會跑版。
+ * 詳見 src/lib/fonts.ts。
+ */
+function FontSelect({
+  value,
+  onChange,
+}: {
+  value: string | undefined;
+  onChange: (stack: string) => void;
+}) {
+  const current = fontIdOfStack(value);
+  return (
+    <Field label="字型">
+      <select
+        className="field-input"
+        value={current}
+        onChange={(e) => onChange(fontStackOf(e.target.value))}
+      >
+        {FONT_CHOICES.map((choice) => (
+          <option key={choice.id} value={choice.id}>
+            {choice.label}　{choice.hint}
+          </option>
+        ))}
+      </select>
+    </Field>
   );
 }
 
@@ -512,6 +544,7 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
               </ToggleButton>
             ))}
           </div>
+          <FontSelect value={el.fontFamily} onChange={(stack) => update({ fontFamily: stack })} />
           <Field label="條列">
             <div className="flex gap-1">
               {(
@@ -606,6 +639,7 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
               <NumberInput value={el.cellPadding} min={0} onChange={(v) => update({ cellPadding: Math.max(0, v) })} suffix="px" />
             </Field>
           </div>
+          <FontSelect value={el.fontFamily} onChange={(stack) => update({ fontFamily: stack })} />
           <Field label="文字顏色">
             <ColorInput value={el.color} onChange={(v) => update({ color: v })} />
           </Field>

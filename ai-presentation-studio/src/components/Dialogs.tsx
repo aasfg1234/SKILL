@@ -8,6 +8,7 @@ import { exportValidationReport } from '../actions';
 import { Icon } from './Icon';
 import { SLIDE_LAYOUTS } from '../model/layouts';
 import { findInPresentation } from '../model/search';
+import { FONT_CHOICES, fontIdOfStack, fontStackOf } from '../lib/fonts';
 
 function Modal({
   title,
@@ -297,6 +298,26 @@ function SettingsDialog() {
             />
           </label>
         </div>
+        <label className="block">
+          <span className="mb-1 block text-[11px] text-ink-3">整份簡報的預設字型</span>
+          <select
+            className="field-input"
+            value={fontIdOfStack(state.presentation.theme.fontFamily)}
+            onChange={(e) => editorStore.setThemeFont(fontStackOf(e.target.value))}
+          >
+            {FONT_CHOICES.map((choice) => (
+              <option key={choice.id} value={choice.id}>
+                {choice.label}　{choice.hint}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-[11px] leading-snug text-ink-3">
+            清單裡都是 Windows 與 Mac 都有、而且尺寸一致的字型。
+            換一台電腦開啟匯出的檔案，版面不會跑掉。
+            Android 手機沒有這些字型，仍可能略有差異。
+          </span>
+        </label>
+
         <div className="rounded-lg px-3 py-2 text-[11px] text-ink-2" style={{ background: 'var(--color-panel-2)' }}>
           協定：<span className="font-mono">{state.presentation.protocol}</span>
           <br />

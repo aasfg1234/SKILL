@@ -18,12 +18,19 @@ import {
 } from './types';
 import { newElementId, newId, newPresentationId, newSlideId, nextTaskId } from './ids';
 import { evenColumnWidths } from './table';
+import { DEFAULT_FONT_ID, fontStackOf } from '../lib/fonts';
 
 export const DEFAULT_WIDTH = 1920;
 export const DEFAULT_HEIGHT = 1080;
 
-export const FONT_STACK =
-  '"Noto Sans TC","PingFang TC","Microsoft JhengHei","微軟正黑體",-apple-system,"Segoe UI",sans-serif';
+/**
+ * 簡報的預設字型。
+ *
+ * 一律拉丁字型在前。中文字在各家字型都是等寬的，換字型不影響寬度；
+ * 真正讓版面跑掉的是英文與數字，把它固定成 Arial 就不會跑版。
+ * 詳見 src/lib/fonts.ts。
+ */
+export const FONT_STACK = fontStackOf(DEFAULT_FONT_ID);
 
 export function createDefaultTheme(): Theme {
   return {

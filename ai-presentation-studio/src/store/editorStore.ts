@@ -9,6 +9,7 @@ import {
 } from '../model/factory';
 import { createDemoPresentation } from '../model/demo';
 import { buildLayoutElements } from '../model/layouts';
+import { migratePresentationFonts } from '../model/migrate';
 import { replaceInPresentation, type SearchOptions } from '../model/search';
 import { resolveSlideSelection, type SlideSelectMode } from '../lib/slideSelection';
 import { newGroupId, nextTaskId } from '../model/ids';
@@ -110,7 +111,10 @@ function loadPersisted(): Persisted | null {
 
 function initialState(): EditorState {
   const persisted = loadPersisted();
-  const presentation = persisted?.presentation ?? createDemoPresentation();
+  // 舊存檔的字型是中文優先，換系統會跑版，載入時一併升級。
+  const presentation = migratePresentationFonts(
+    persisted?.presentation ?? createDemoPresentation(),
+  );
   const currentSlideId =
     persisted?.currentSlideId && presentation.slides.some((s) => s.id === persisted.currentSlideId)
       ? persisted.currentSlideId
@@ -1040,6 +1044,13 @@ class EditorStore {
   updateMetadata(props: Partial<Presentation['metadata']>): void {
     this.commit((draft) => {
       Object.assign(draft.metadata, props);
+    });
+  }
+
+  /** 設定整份簡報的預設字型（內文與標題一起換）。 */
+  setThemeFont(stack: string): void {
+    this.commit((draft) => {
+      draft.theme = { ...draft.theme, fontFamily: stack, headingFontFamily: stack };
     });
   }
 

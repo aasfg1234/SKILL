@@ -26,6 +26,10 @@
   --color-danger-soft: #fef2f2;
   --color-stage: #dfe3ea;
 
+  /*
+   * 編輯器介面本身的字型，不會被匯出，所以維持原樣。
+   * 投影片內容的字型另外由簡報主題決定（src/lib/fonts.ts），一律拉丁字型在前。
+   */
   --font-sans:
     'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', '微軟正黑體', -apple-system, 'Segoe UI',
     sans-serif;
