@@ -46,6 +46,7 @@ export type ToolId =
   | 'line'
   | 'image'
   | 'table'
+  | 'chart'
   | 'ai_component';
 
 export interface ToastMessage {

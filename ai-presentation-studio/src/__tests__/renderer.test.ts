@@ -4,6 +4,8 @@ import { renderPresentationToHtml } from '../renderer/renderHtml';
 import { applyPatch } from '../model/patch';
 import { buildMockPatch } from '../handoff/mockAi';
 import { escapeHtml } from '../model/sanitize';
+import { createChartElement, createTableElement } from '../model/factory';
+import { mergeCells } from '../model/table';
 
 describe('HTML Renderer', () => {
   const presentation = createDemoPresentation();
@@ -95,6 +97,28 @@ describe('HTML Renderer', () => {
     expect(out).toContain('2026 AI 科技趨勢');
     // 備註仍會匯出，講者檢視才有東西可看（觀眾看不到）
     expect(out).toContain('data-notes=');
+  });
+
+  it('圖表與合併的表格都能正確匯出', () => {
+    const p = createDemoPresentation();
+    p.slides[0].elements.push(
+      createChartElement({ id: 'c1', labels: ['甲', '乙'], values: [3, 7], z: 90 }),
+    );
+    p.slides[0].elements.push(
+      mergeCells(
+        createTableElement({ id: 't1', rows: 2, columns: 2, z: 91 }),
+        { row: 0, col: 0 },
+        { row: 0, col: 1 },
+      ),
+    );
+    const out = renderPresentationToHtml(p);
+
+    expect(out).toContain('aps-chart');
+    expect(out).toContain('<svg');
+    expect(out).toContain('甲');
+    // 合併之後只剩三格，而且第一格橫跨兩欄
+    expect(out).toContain('grid-column:1 / span 2');
+    expect((out.match(/grid-column:/g) ?? []).length).toBe(3);
   });
 
   it('匯出的 HTML 內建講者檢視', () => {

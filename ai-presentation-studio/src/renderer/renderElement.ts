@@ -1,6 +1,8 @@
 import { escapeHtml, sanitizeAiOutput, sanitizeImageSrc } from '../model/sanitize';
 import type { AIComponentElement, SlideElement } from '../model/types';
 import { formatListLines, normalizeListStyle } from '../model/textList';
+import { isCoveredCell, mergeCovering } from '../model/table';
+import { buildChartSvg } from '../model/chart';
 
 /**
  * 元素 → HTML 片段。
@@ -150,7 +152,11 @@ export function renderElementToHtml(el: SlideElement): string {
         .map((line, row) =>
           line
             .map((cell, col) => {
+              if (isCoveredCell(el, row, col)) return '';
+              const merge = mergeCovering(el, row, col);
               const cellStyle = styleString({
+                'grid-column': `${col + 1} / span ${merge?.colSpan ?? 1}`,
+                'grid-row': `${row + 1} / span ${merge?.rowSpan ?? 1}`,
                 display: 'flex',
                 'align-items': 'center',
                 padding: `${el.cellPadding}px`,
@@ -219,6 +225,10 @@ export function renderElementToHtml(el: SlideElement): string {
         display: 'block',
       });
       return `<div class="aps-el aps-image" style="${style}"><img src="${escapeHtml(src)}" alt="${escapeHtml(el.alt)}" style="${imgStyle}" /></div>`;
+    }
+    case 'chart': {
+      const style = styleString({ ...boxStyle(el), overflow: 'hidden' });
+      return `<div class="aps-el aps-chart" style="${style}">${buildChartSvg(el)}</div>`;
     }
     case 'ai_component':
       return renderAiComponent(el);

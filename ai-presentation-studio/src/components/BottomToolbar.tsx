@@ -11,6 +11,7 @@ const TOOLS: Array<{ id: ToolId; label: string; icon: string; hint: string }> = 
   { id: 'ellipse', label: '圓形', icon: 'circle', hint: '橢圓／圓形' },
   { id: 'line', label: '線條', icon: 'line', hint: '直線' },
   { id: 'table', label: '表格', icon: 'grid', hint: '三列三欄的表格' },
+  { id: 'chart', label: '圖表', icon: 'chart', hint: '長條圖／折線圖／圓餅圖' },
 ];
 
 export function BottomToolbar() {
@@ -109,12 +110,14 @@ export function BottomToolbar() {
         {state.tool === 'text' && '在畫布上點一下或拖曳文字框，接著直接輸入文字。'}
         {state.tool === 'image' && '在畫布上點一下或拖曳圖片框，接著選擇圖片。'}
         {state.tool === 'table' && '在畫布上點一下或拖曳表格，接著雙擊表格編輯儲存格。'}
+        {state.tool === 'chart' && '在畫布上點一下或拖曳圖表，接著在右側輸入資料。'}
         {state.tool === 'ai_component' &&
           '在畫布上點一下或拖曳 AI 元件，接著在右側輸入 Prompt。'}
         {state.tool !== 'select' &&
           state.tool !== 'text' &&
           state.tool !== 'image' &&
           state.tool !== 'table' &&
+          state.tool !== 'chart' &&
           state.tool !== 'ai_component' &&
           '在畫布上點一下或拖曳，即可新增元素。'}
       </span>

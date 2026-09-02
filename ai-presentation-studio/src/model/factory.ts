@@ -10,6 +10,7 @@ import {
   type LineElement,
   type Presentation,
   type RectElement,
+  type ChartElement,
   type Slide,
   type SlideElement,
   type TableElement,
@@ -18,6 +19,7 @@ import {
 } from './types';
 import { newElementId, newId, newPresentationId, newSlideId, nextTaskId } from './ids';
 import { evenColumnWidths } from './table';
+import { DEFAULT_CHART_COLORS } from './chart';
 import { DEFAULT_FONT_ID, fontStackOf } from '../lib/fonts';
 
 export const DEFAULT_WIDTH = 1920;
@@ -156,6 +158,31 @@ export function createTableElement(
     borderColor: init.borderColor ?? '#D1D5DB',
     headerFill: init.headerFill ?? '#F3F4F6',
     cellPadding: init.cellPadding ?? 16,
+    ...(init.fontFamily ? { fontFamily: init.fontFamily } : {}),
+  };
+}
+
+/**
+ * 建立圖表。
+ *
+ * 這一版只支援單一數列：一組標籤配一組數值。
+ * 數值不足會補零，多的忽略，詳見 src/model/chart.ts。
+ */
+export function createChartElement(
+  init: BaseInit & Partial<ChartElement> = {},
+): ChartElement {
+  return {
+    ...base('chart', init, 900, 520),
+    type: 'chart',
+    chartType: init.chartType ?? 'bar',
+    labels: init.labels ?? ['第一季', '第二季', '第三季', '第四季'],
+    values: init.values ?? [32, 48, 41, 60],
+    colors: init.colors ?? [...DEFAULT_CHART_COLORS],
+    title: init.title ?? '',
+    showValues: init.showValues ?? true,
+    fontSize: init.fontSize ?? 28,
+    color: init.color ?? '#111827',
+    gridColor: init.gridColor ?? '#E5E7EB',
     ...(init.fontFamily ? { fontFamily: init.fontFamily } : {}),
   };
 }

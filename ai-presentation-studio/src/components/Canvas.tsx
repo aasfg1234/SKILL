@@ -6,11 +6,19 @@ import {
   createImageElement,
   createLineElement,
   createRectElement,
+  createChartElement,
   createTableElement,
   createTextElement,
 } from '../model/factory';
 import type { SlideElement, TableElement, TextElement } from '../model/types';
-import { resizeTableColumn, setTableCell, tableCellRects } from '../model/table';
+import {
+  mergeCells,
+  mergeCovering,
+  resizeTableColumn,
+  setTableCell,
+  tableCellRects,
+  unmergeCells,
+} from '../model/table';
 import { editorStore, useEditorState, type ToolId } from '../store/editorStore';
 import { pickImageFile } from '../lib/files';
 import {
@@ -245,6 +253,29 @@ export function growTextHeight(
   return Math.min(wanted, room);
 }
 
+interface CellRange {
+  a: { row: number; col: number };
+  b: { row: number; col: number };
+}
+
+/** 選取範圍涵蓋幾格。 */
+function rangeSize(range: CellRange): number {
+  return (
+    (Math.abs(range.a.row - range.b.row) + 1) * (Math.abs(range.a.col - range.b.col) + 1)
+  );
+}
+
+/** 這一格在不在選取範圍內。 */
+function inCellRange(range: CellRange | null, row: number, col: number): boolean {
+  if (!range || rangeSize(range) < 2) return false;
+  return (
+    row >= Math.min(range.a.row, range.b.row) &&
+    row <= Math.max(range.a.row, range.b.row) &&
+    col >= Math.min(range.a.col, range.b.col) &&
+    col <= Math.max(range.a.col, range.b.col)
+  );
+}
+
 /** 儲存格內容：統一換行字元，並去掉瀏覽器補在結尾的空行。 */
 function normalizeCellText(value: string): string {
   return value.replace(/\r\n?/g, '\n').replace(/\n$/, '');
@@ -310,6 +341,10 @@ export function Canvas() {
   const [dropping, setDropping] = useState(false);
   const pendingTableCell = useRef<{ row: number; col: number } | null>(null);
   const colResize = useRef<{ table: TableElement; at: number; startX: number } | null>(null);
+  const [cellRange, setCellRange] = useState<{
+    a: { row: number; col: number };
+    b: { row: number; col: number };
+  } | null>(null);
 
   const zoom = state.zoom;
 
@@ -962,6 +997,9 @@ export function Canvas() {
       case 'table':
         editorStore.addElement(createTableElement({ ...placement(1200, 360), rows: 3, columns: 3 }));
         break;
+      case 'chart':
+        editorStore.addElement(createChartElement(placement(900, 520)));
+        break;
       case 'ellipse':
         editorStore.addElement(createEllipseElement(placement(360, 240)));
         break;
@@ -1050,6 +1088,10 @@ export function Canvas() {
   const editingTable = slide?.elements.find(
     (el) => el.id === state.editingTextId && el.type === 'table',
   ) as TableElement | undefined;
+
+  useEffect(() => {
+    if (!editingTable) setCellRange(null);
+  }, [editingTable]);
 
   const editableRef = useRef<HTMLDivElement | null>(null);
   useLayoutEffect(() => {
@@ -1593,7 +1635,13 @@ export function Canvas() {
                 suppressContentEditableWarning
                 role="textbox"
                 aria-label={`第 ${cell.row + 1} 列第 ${cell.col + 1} 欄`}
-                onPointerDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  const here = { row: cell.row, col: cell.col };
+                  setCellRange((prev) =>
+                    e.shiftKey && prev ? { a: prev.a, b: here } : { a: here, b: here },
+                  );
+                }}
                 onInput={(e) =>
                   editorStore.updateElement(
                     editingTable.id,
@@ -1628,7 +1676,9 @@ export function Canvas() {
                   fontWeight: editingTable.headerRow && cell.row === 0 ? 700 : 400,
                   color: editingTable.color,
                   fontFamily: editingTable.fontFamily,
-                  background: 'rgba(255,255,255,.94)',
+                  background: inCellRange(cellRange, cell.row, cell.col)
+                    ? 'color-mix(in srgb, var(--color-brand) 16%, #fff)'
+                    : 'rgba(255,255,255,.94)',
                   border: `${1.5 / zoom}px solid var(--color-brand)`,
                   outline: 'none',
                   overflow: 'hidden',
@@ -1653,6 +1703,58 @@ export function Canvas() {
                 }}
               />
             ))}
+
+          {/* 表格合併工具列 */}
+          {editingTable && (
+            <div
+              className="panel-card flex items-center gap-1 p-1.5 shadow-xl"
+              style={{
+                position: 'absolute',
+                left: editingTable.x,
+                top: Math.max(8 / zoom, editingTable.y - 52 / zoom),
+                transform: `scale(${1 / zoom})`,
+                transformOrigin: 'top left',
+                zIndex: LAYER.canvasOverlay,
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <span className="px-1 text-[11px] text-ink-3">
+                {cellRange && rangeSize(cellRange) > 1
+                  ? `已選 ${rangeSize(cellRange)} 格`
+                  : '按住 Shift 點另一格可選範圍'}
+              </span>
+              <button
+                type="button"
+                className="tool-btn px-2 py-1 text-[11px]"
+                disabled={!cellRange || rangeSize(cellRange) < 2}
+                onClick={() => {
+                  if (!cellRange) return;
+                  const next = mergeCells(editingTable, cellRange.a, cellRange.b);
+                  editorStore.updateElement(editingTable.id, {
+                    cells: next.cells,
+                    merges: next.merges ?? [],
+                  });
+                  setCellRange({ a: cellRange.a, b: cellRange.a });
+                }}
+              >
+                合併儲存格
+              </button>
+              <button
+                type="button"
+                className="tool-btn px-2 py-1 text-[11px]"
+                disabled={
+                  !cellRange || !mergeCovering(editingTable, cellRange.a.row, cellRange.a.col)
+                }
+                onClick={() => {
+                  if (!cellRange) return;
+                  const next = unmergeCells(editingTable, cellRange.a.row, cellRange.a.col);
+                  editorStore.updateElement(editingTable.id, { merges: next.merges ?? [] });
+                }}
+              >
+                取消合併
+              </button>
+            </div>
+          )}
 
           {/* 文字直接編輯 */}
           {editing && (

@@ -3,6 +3,8 @@ import { sanitizeAiOutput, sanitizeImageSrc } from '../model/sanitize';
 import type { AIComponentElement, SlideElement } from '../model/types';
 import { AI_KIND_LABELS, AI_STATUS_ICON, AI_STATUS_LABELS } from '../lib/labels';
 import { formatListLines, normalizeListStyle } from '../model/textList';
+import { isCoveredCell, mergeCovering } from '../model/table';
+import { buildChartSvg } from '../model/chart';
 
 /**
  * 畫布 / 縮圖 / 播放模式共用的元素外觀。
@@ -195,10 +197,15 @@ export function ElementView({ el, mode }: { el: SlideElement; mode: ViewMode }) 
             }}
           >
             {el.cells.map((line, row) =>
-              line.map((cell, col) => (
+              line.map((cell, col) => {
+                if (isCoveredCell(el, row, col)) return null;
+                const merge = mergeCovering(el, row, col);
+                return (
                 <div
                   key={`${row}-${col}`}
                   style={{
+                    gridColumn: `${col + 1} / span ${merge?.colSpan ?? 1}`,
+                    gridRow: `${row + 1} / span ${merge?.rowSpan ?? 1}`,
                     display: 'flex',
                     alignItems: 'center',
                     padding: el.cellPadding,
@@ -214,12 +221,20 @@ export function ElementView({ el, mode }: { el: SlideElement; mode: ViewMode }) 
                 >
                   {cell}
                 </div>
-              )),
+                );
+              }),
             )}
           </div>
         </div>
       );
     }
+    case 'chart':
+      return (
+        <div
+          style={{ ...style, overflow: 'hidden' }}
+          dangerouslySetInnerHTML={{ __html: buildChartSvg(el) }}
+        />
+      );
     case 'rect':
       return (
         <div

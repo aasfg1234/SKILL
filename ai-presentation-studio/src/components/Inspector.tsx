@@ -21,6 +21,7 @@ import {
   removeTableRow,
 } from '../model/table';
 import { FONT_CHOICES, fontIdOfStack, fontStackOf } from '../lib/fonts';
+import { CHART_TYPES } from '../model/chart';
 
 /** 右側屬性面板：位置、大小、樣式與 AI 設定。 */
 
@@ -571,6 +572,147 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
           <Field label="字距">
             <NumberInput value={el.letterSpacing} step={0.5} onChange={(v) => update({ letterSpacing: v })} suffix="px" />
           </Field>
+        </Section>
+      )}
+
+      {!multi && el.type === 'chart' && (
+        <Section title="圖表" icon="chart">
+          <Field label="圖表類型">
+            <select
+              className="field-input"
+              value={el.chartType}
+              onChange={(e) => update({ chartType: e.target.value })}
+            >
+              {CHART_TYPES.map((type) => (
+                <option key={type.id} value={type.id}>
+                  {type.label}　{type.hint}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="圖表標題（留白就不顯示）">
+            <input
+              className="field-input"
+              value={el.title}
+              onChange={(e) => update({ title: e.target.value })}
+            />
+          </Field>
+
+          <div>
+            <span className="mb-1 block text-[11px] text-ink-3">資料</span>
+            <div className="space-y-1">
+              {el.labels.map((label, i) => (
+                <div key={i} className="flex items-center gap-1">
+                  <input
+                    className="field-input flex-1"
+                    aria-label={`第 ${i + 1} 筆的名稱`}
+                    value={label}
+                    onChange={(e) => {
+                      const labels = [...el.labels];
+                      labels[i] = e.target.value;
+                      update({ labels });
+                    }}
+                  />
+                  <input
+                    type="number"
+                    className="field-input w-[76px]"
+                    aria-label={`第 ${i + 1} 筆的數值`}
+                    value={Number.isFinite(el.values[i]) ? el.values[i] : 0}
+                    onChange={(e) => {
+                      const values = el.labels.map((_, k) =>
+                        Number.isFinite(el.values[k]) ? el.values[k] : 0,
+                      );
+                      values[i] = Number(e.target.value);
+                      update({ values });
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="tool-btn px-1.5"
+                    aria-label={`刪除第 ${i + 1} 筆`}
+                    disabled={el.labels.length <= 1}
+                    onClick={() =>
+                      update({
+                        labels: el.labels.filter((_, k) => k !== i),
+                        values: el.labels
+                          .map((_, k) => (Number.isFinite(el.values[k]) ? el.values[k] : 0))
+                          .filter((_, k) => k !== i),
+                      })
+                    }
+                  >
+                    <Icon name="trash" size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="tool-btn mt-1.5 w-full justify-center"
+              onClick={() =>
+                update({
+                  labels: [...el.labels, `項目 ${el.labels.length + 1}`],
+                  values: [
+                    ...el.labels.map((_, k) => (Number.isFinite(el.values[k]) ? el.values[k] : 0)),
+                    0,
+                  ],
+                })
+              }
+            >
+              ＋ 新增一筆
+            </button>
+          </div>
+
+          <div className="flex gap-1">
+            <ToggleButton
+              active={el.showValues}
+              onClick={() => update({ showValues: !el.showValues })}
+              title="在圖上標出數值"
+            >
+              <span className="text-[11px]">顯示數值</span>
+            </ToggleButton>
+          </div>
+
+          <FontSelect value={el.fontFamily} onChange={(stack) => update({ fontFamily: stack })} />
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="字級">
+              <NumberInput
+                value={el.fontSize}
+                min={1}
+                onChange={(v) => v > 0 && update({ fontSize: v })}
+                suffix="px"
+              />
+            </Field>
+            <Field label="文字顏色">
+              <ColorInput value={el.color} onChange={(v) => update({ color: v })} />
+            </Field>
+          </div>
+          <Field label="格線顏色">
+            <ColorInput value={el.gridColor} onChange={(v) => update({ gridColor: v })} />
+          </Field>
+          <div>
+            <span className="mb-1 block text-[11px] text-ink-3">資料顏色（依序使用，用完循環）</span>
+            <div className="flex flex-wrap gap-1">
+              {el.colors.map((color, i) => (
+                <input
+                  key={i}
+                  type="color"
+                  aria-label={`第 ${i + 1} 個顏色`}
+                  className="h-7 w-8 cursor-pointer rounded-md border"
+                  style={{ borderColor: 'var(--color-line)', background: 'transparent' }}
+                  value={/^#[0-9a-f]{6}$/i.test(color) ? color : '#000000'}
+                  onChange={(e) => {
+                    const colors = [...el.colors];
+                    colors[i] = e.target.value;
+                    update({ colors });
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          <p className="text-[11px] leading-snug text-ink-3">
+            這一版只支援單一數列。要在同一張圖放兩三條線，請改用 AI 元件。
+          </p>
         </Section>
       )}
 

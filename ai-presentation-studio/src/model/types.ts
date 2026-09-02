@@ -41,6 +41,7 @@ export type ElementType =
   | 'line'
   | 'image'
   | 'table'
+  | 'chart'
   | 'ai_component';
 
 export interface BaseElement {
@@ -87,10 +88,20 @@ export interface TextElement extends BaseElement {
   listStyle: ListStyle;
 }
 
+/** 一塊被合併的儲存格範圍，左上角是 (row, col)。 */
+export interface TableMerge {
+  row: number;
+  col: number;
+  rowSpan: number;
+  colSpan: number;
+}
+
 export interface TableElement extends BaseElement {
   type: 'table';
-  /** cells[列][欄]；這一版不支援儲存格合併 */
+  /** cells[列][欄] */
   cells: string[][];
+  /** 已合併的範圍；被蓋住的格子不會單獨顯示 */
+  merges?: TableMerge[];
   /** 每一欄佔總寬的比例，總和為 1 */
   columnWidths: number[];
   /** 第一列是否當成標題列 */
@@ -171,9 +182,32 @@ export interface AIComponentElement extends BaseElement {
   errorMessage?: string;
 }
 
+export type ChartType = 'bar' | 'line' | 'pie';
+
+export interface ChartElement extends BaseElement {
+  type: 'chart';
+  chartType: ChartType;
+  /** 每一筆資料的名稱 */
+  labels: string[];
+  /** 對應的數值；長度不足會補零 */
+  values: number[];
+  /** 依序使用的顏色，用完會循環 */
+  colors: string[];
+  title: string;
+  /** 要不要在圖上標出數值 */
+  showValues: boolean;
+  fontSize: number;
+  fontFamily?: string;
+  /** 文字顏色 */
+  color: string;
+  /** 格線顏色 */
+  gridColor: string;
+}
+
 export type SlideElement =
   | TextElement
   | TableElement
+  | ChartElement
   | RectElement
   | EllipseElement
   | LineElement

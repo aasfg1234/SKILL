@@ -42,6 +42,7 @@ export const ELEMENT_TYPE_LABELS: Record<ElementType, string> = {
   line: '線條',
   image: '圖片',
   table: '表格',
+  chart: '圖表',
   ai_component: 'AI 元件',
 };
 

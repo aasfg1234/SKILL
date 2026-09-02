@@ -1,4 +1,4 @@
-import type { TableElement } from './types';
+import type { TableElement, TableMerge } from './types';
 
 /**
  * 表格的純函式。
@@ -6,7 +6,8 @@ import type { TableElement } from './types';
  * 欄寬一律用「佔總寬的比例」，總和保持 1，
  * 這樣表格被縮放時欄位比例不會跑掉。
  *
- * 這一版不支援儲存格合併。
+ * 合併用 `merges` 記錄，每一筆是一塊矩形範圍。被範圍蓋住、但不是左上角的格子
+ * 不會單獨顯示，也不會出現在 `tableCellRects` 的結果裡。
  */
 
 export interface TableCellRect {
@@ -32,6 +33,95 @@ function normalizeWidths(widths: number[]): number[] {
   return safe.map((w) => w / total);
 }
 
+interface CellPos {
+  row: number;
+  col: number;
+}
+
+/** 兩個座標框出來的矩形範圍，順序顛倒也沒關係。 */
+function rectOf(a: CellPos, b: CellPos) {
+  return {
+    row: Math.min(a.row, b.row),
+    col: Math.min(a.col, b.col),
+    rowSpan: Math.abs(a.row - b.row) + 1,
+    colSpan: Math.abs(a.col - b.col) + 1,
+  };
+}
+
+function overlaps(a: TableMerge, b: TableMerge): boolean {
+  return (
+    a.col < b.col + b.colSpan &&
+    a.col + a.colSpan > b.col &&
+    a.row < b.row + b.rowSpan &&
+    a.row + a.rowSpan > b.row
+  );
+}
+
+/** 這一格屬於哪一個合併範圍；沒有就回傳 null。 */
+export function mergeCovering(el: TableElement, row: number, col: number): TableMerge | null {
+  return (
+    (el.merges ?? []).find(
+      (m) =>
+        row >= m.row && row < m.row + m.rowSpan && col >= m.col && col < m.col + m.colSpan,
+    ) ?? null
+  );
+}
+
+/** 這一格是不是被別人蓋住了（在合併範圍內，但不是左上角）。 */
+export function isCoveredCell(el: TableElement, row: number, col: number): boolean {
+  const merge = mergeCovering(el, row, col);
+  return merge !== null && !(merge.row === row && merge.col === col);
+}
+
+/**
+ * 合併兩個座標框出來的範圍。
+ *
+ * 範圍內的文字會併到左上角那一格，不會弄丟。
+ * 與新範圍重疊的舊合併會被取代。只選一格時不做任何事。
+ */
+export function mergeCells(el: TableElement, a: CellPos, b: CellPos): TableElement {
+  const rows = el.cells.length;
+  const cols = el.cells[0]?.length ?? 0;
+  const next = rectOf(a, b);
+  if (next.rowSpan * next.colSpan <= 1) return el;
+  if (next.row < 0 || next.col < 0) return el;
+  if (next.row + next.rowSpan > rows || next.col + next.colSpan > cols) return el;
+
+  const texts: string[] = [];
+  const cells = el.cells.map((line, r) =>
+    line.map((cell, c) => {
+      const inside =
+        r >= next.row && r < next.row + next.rowSpan && c >= next.col && c < next.col + next.colSpan;
+      if (!inside) return cell;
+      if (cell.trim()) texts.push(cell.trim());
+      return '';
+    }),
+  );
+  cells[next.row][next.col] = texts.join(' ');
+
+  const merges = [...(el.merges ?? []).filter((m) => !overlaps(m, next)), next];
+  return { ...el, cells, merges };
+}
+
+/** 取消這一格所屬的合併。 */
+export function unmergeCells(el: TableElement, row: number, col: number): TableElement {
+  const merge = mergeCovering(el, row, col);
+  if (!merge) return el;
+  return { ...el, merges: (el.merges ?? []).filter((m) => m !== merge) };
+}
+
+/** 插入或刪除列欄之後，重新整理合併範圍；越界或已經沒有跨格的就丟掉。 */
+function fixMerges(merges: TableMerge[], rows: number, cols: number): TableMerge[] {
+  return merges.filter(
+    (m) =>
+      m.rowSpan * m.colSpan > 1 &&
+      m.row >= 0 &&
+      m.col >= 0 &&
+      m.row + m.rowSpan <= rows &&
+      m.col + m.colSpan <= cols,
+  );
+}
+
 /** 算出每一格在元素座標系裡的位置與大小。 */
 export function tableCellRects(el: TableElement): TableCellRect[] {
   const rows = el.cells.length;
@@ -40,14 +130,31 @@ export function tableCellRects(el: TableElement): TableCellRect[] {
 
   const widths = normalizeWidths(el.columnWidths.slice(0, cols));
   const rowHeight = el.height / rows;
-  const rects: TableCellRect[] = [];
+  const offsets: number[] = [];
+  let acc = 0;
+  for (let col = 0; col < cols; col += 1) {
+    offsets.push(acc);
+    acc += el.width * (widths[col] ?? 1 / cols);
+  }
 
+  const rects: TableCellRect[] = [];
   for (let row = 0; row < rows; row += 1) {
-    let x = 0;
     for (let col = 0; col < cols; col += 1) {
-      const width = el.width * (widths[col] ?? 1 / cols);
-      rects.push({ row, col, x, y: row * rowHeight, width, height: rowHeight });
-      x += width;
+      if (isCoveredCell(el, row, col)) continue;
+      const merge = mergeCovering(el, row, col);
+      const colSpan = merge?.colSpan ?? 1;
+      const rowSpan = merge?.rowSpan ?? 1;
+      const width = widths
+        .slice(col, col + colSpan)
+        .reduce((sum, w) => sum + el.width * w, 0);
+      rects.push({
+        row,
+        col,
+        x: offsets[col],
+        y: row * rowHeight,
+        width,
+        height: rowHeight * rowSpan,
+      });
     }
   }
   return rects;
@@ -72,14 +179,30 @@ export function insertTableRow(el: TableElement, at: number): TableElement {
   const index = Math.min(Math.max(0, at), el.cells.length);
   const cells = el.cells.map((line) => [...line]);
   cells.splice(index, 0, Array.from({ length: cols }, () => ''));
-  return { ...el, cells };
+  const merges = (el.merges ?? []).map((m) =>
+    m.row >= index
+      ? { ...m, row: m.row + 1 }
+      : m.row + m.rowSpan > index
+        ? { ...m, rowSpan: m.rowSpan + 1 }
+        : m,
+  );
+  return { ...el, cells, merges: fixMerges(merges, cells.length, cols) };
 }
 
 /** 刪除第 at 列；至少保留一列。 */
 export function removeTableRow(el: TableElement, at: number): TableElement {
   if (el.cells.length <= 1) return el;
   const cells = el.cells.filter((_, r) => r !== at).map((line) => [...line]);
-  return { ...el, cells };
+  const merges = (el.merges ?? [])
+    .map((m) =>
+      m.row > at
+        ? { ...m, row: m.row - 1 }
+        : m.row + m.rowSpan > at
+          ? { ...m, rowSpan: m.rowSpan - 1 }
+          : m,
+    )
+    .filter((m) => m.rowSpan > 0);
+  return { ...el, cells, merges: fixMerges(merges, cells.length, cells[0]?.length ?? 0) };
 }
 
 /** 在第 at 欄插入一欄空白，並重新分配欄寬。 */
@@ -93,7 +216,19 @@ export function insertTableColumn(el: TableElement, at: number): TableElement {
   });
   const widths = [...normalizeWidths(el.columnWidths.slice(0, cols))];
   widths.splice(index, 0, cols > 0 ? 1 / cols : 1);
-  return { ...el, cells, columnWidths: normalizeWidths(widths) };
+  const merges = (el.merges ?? []).map((m) =>
+    m.col >= index
+      ? { ...m, col: m.col + 1 }
+      : m.col + m.colSpan > index
+        ? { ...m, colSpan: m.colSpan + 1 }
+        : m,
+  );
+  return {
+    ...el,
+    cells,
+    columnWidths: normalizeWidths(widths),
+    merges: fixMerges(merges, cells.length, cells[0]?.length ?? 0),
+  };
 }
 
 /** 欄寬的下限，避免被拖到看不見。 */
@@ -128,5 +263,19 @@ export function removeTableColumn(el: TableElement, at: number): TableElement {
   if (cols <= 1) return el;
   const cells = el.cells.map((line) => line.filter((_, c) => c !== at));
   const widths = normalizeWidths(el.columnWidths.slice(0, cols)).filter((_, c) => c !== at);
-  return { ...el, cells, columnWidths: normalizeWidths(widths) };
+  const merges = (el.merges ?? [])
+    .map((m) =>
+      m.col > at
+        ? { ...m, col: m.col - 1 }
+        : m.col + m.colSpan > at
+          ? { ...m, colSpan: m.colSpan - 1 }
+          : m,
+    )
+    .filter((m) => m.colSpan > 0);
+  return {
+    ...el,
+    cells,
+    columnWidths: normalizeWidths(widths),
+    merges: fixMerges(merges, cells.length, cells[0]?.length ?? 0),
+  };
 }
