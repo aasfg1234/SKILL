@@ -3,6 +3,7 @@ import { createDemoPresentation } from '../model/demo';
 import { renderPresentationToHtml } from '../renderer/renderHtml';
 import { applyPatch } from '../model/patch';
 import { buildMockPatch } from '../handoff/mockAi';
+import { escapeHtml } from '../model/sanitize';
 
 describe('HTML Renderer', () => {
   const presentation = createDemoPresentation();
@@ -68,6 +69,20 @@ describe('HTML Renderer', () => {
     const el = done.slides[1].elements.find((e) => e.id === 'ai-chart-001');
     expect(el).toBeDefined();
     expect(doneHtml).toContain(`left:${el!.x}px;top:${el!.y}px;width:${el!.width}px;height:${el!.height}px`);
+  });
+
+  it('把每一頁的備註一起匯出，講者檢視才有東西可看', () => {
+    const withNotes = presentation.slides.filter((slide) => slide.notes.trim() !== '');
+
+    expect(withNotes.length).toBeGreaterThan(0);
+    for (const slide of withNotes) {
+      expect(html).toContain(`data-notes="${escapeHtml(slide.notes)}"`);
+    }
+  });
+
+  it('匯出的 HTML 內建講者檢視', () => {
+    expect(html).toContain('aps-presenter');
+    expect(html).toContain('講者檢視');
   });
 
   it('匯出的 HTML 以拉丁字型開頭，換系統開啟才不會跑版', () => {

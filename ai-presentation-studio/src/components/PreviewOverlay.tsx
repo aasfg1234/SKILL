@@ -3,6 +3,7 @@ import { editorStore, useEditorState } from '../store/editorStore';
 import { ElementView, sortByZ } from './ElementView';
 import { Icon } from './Icon';
 import { LAYER } from '../lib/layers';
+import { buildPresenterView } from '../model/presenter';
 
 /** 播放模式：只顯示投影片，不顯示任何編輯器介面。 */
 export function PreviewOverlay() {
@@ -14,6 +15,9 @@ export function PreviewOverlay() {
   const [scale, setScale] = useState(0.5);
   const [showHint, setShowHint] = useState(true);
   const [showBar, setShowBar] = useState(true);
+  const [presenterOn, setPresenterOn] = useState(false);
+  const [startedAt, setStartedAt] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
 
   useLayoutEffect(() => {
     const el = wrapRef.current;
@@ -31,6 +35,13 @@ export function PreviewOverlay() {
     const timer = setTimeout(() => setShowHint(false), 3200);
     return () => clearTimeout(timer);
   }, []);
+
+  // 講者檢視打開時才跑計時器，關掉就停，不浪費效能。
+  useEffect(() => {
+    if (!presenterOn) return;
+    const timer = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(timer);
+  }, [presenterOn]);
 
   // 播放時控制列閒置就淡出，滑鼠一動再出現，畫面才不會一直被佔掉一條。
   useEffect(() => {
@@ -68,6 +79,17 @@ export function PreviewOverlay() {
           break;
         case 'End':
           editorStore.setPreviewIndex(slides.length - 1);
+          break;
+        case 'n':
+        case 'N':
+          setPresenterOn((on) => {
+            if (!on) {
+              setStartedAt(Date.now());
+              setNow(Date.now());
+            }
+            return !on;
+          });
+          e.preventDefault();
           break;
         case 'f':
         case 'F':
@@ -115,7 +137,7 @@ export function PreviewOverlay() {
 
       {showHint && (
         <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-black/40 px-4 py-1.5 text-[12px] text-white/80">
-          ← → 換頁　空白鍵下一頁　F 全螢幕　Esc 離開
+          ← → 換頁　空白鍵下一頁　F 全螢幕　N 講者檢視　Esc 離開
         </div>
       )}
 
@@ -153,6 +175,22 @@ export function PreviewOverlay() {
             <Icon name="fit" size={15} />
             全螢幕
           </button>
+          <button
+            type="button"
+            className="tool-btn"
+            data-active={presenterOn}
+            title="講者檢視（N）"
+            onClick={() => {
+              if (!presenterOn) {
+                setStartedAt(Date.now());
+                setNow(Date.now());
+              }
+              setPresenterOn((on) => !on);
+            }}
+          >
+            <Icon name="text" size={15} />
+            講者檢視
+          </button>
         </div>
 
         <div className="font-mono text-[13px]">
@@ -164,6 +202,66 @@ export function PreviewOverlay() {
           離開預覽（Esc）
         </button>
       </div>
+
+      {presenterOn && (
+        <aside
+          className="absolute bottom-16 right-4 flex w-[380px] max-h-[60vh] flex-col gap-2.5 overflow-auto rounded-2xl p-4 text-white shadow-2xl"
+          style={{
+            background: 'rgba(15,17,21,.94)',
+            border: '1px solid rgba(255,255,255,.14)',
+            zIndex: 1,
+          }}
+          aria-label="講者檢視"
+        >
+          {(() => {
+            const view = buildPresenterView(slides, state.previewIndex, now - startedAt);
+            return (
+              <>
+                <div className="flex items-baseline justify-between gap-3">
+                  <strong className="text-[13px]">講者檢視</strong>
+                  <span className="font-mono text-[22px] font-bold tabular-nums">
+                    {view.elapsedText}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-[11.5px] text-white/60">
+                  <span>
+                    第 {view.current.index + 1} / {view.total} 頁　{view.current.title}
+                  </span>
+                  <button
+                    type="button"
+                    className="rounded-md px-2 py-0.5 text-[11px] text-white/80"
+                    style={{ background: 'rgba(255,255,255,.12)' }}
+                    onClick={() => {
+                      setStartedAt(Date.now());
+                      setNow(Date.now());
+                    }}
+                  >
+                    計時歸零
+                  </button>
+                </div>
+                <div
+                  className="flex-1 whitespace-pre-wrap pt-2.5 text-[15px] leading-relaxed"
+                  style={{ borderTop: '1px solid rgba(255,255,255,.14)' }}
+                >
+                  {view.current.notes || (
+                    <span className="text-white/40">{view.notesPlaceholder}</span>
+                  )}
+                </div>
+                <div
+                  className="pt-2 text-[12px] text-white/60"
+                  style={{ borderTop: '1px solid rgba(255,255,255,.12)' }}
+                >
+                  {view.next ? `下一頁：${view.next.title || '（未命名）'}` : '這是最後一頁'}
+                </div>
+                <div className="text-[11px] leading-snug text-white/40">
+                  這是編輯器內的排練用面板，顯示在同一個畫面上。
+                  正式簡報請匯出 HTML，在那裡按 N 會開成獨立視窗。
+                </div>
+              </>
+            );
+          })()}
+        </aside>
+      )}
 
       <div
         className="absolute bottom-0 left-0 h-[3px] transition-all"

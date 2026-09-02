@@ -91,9 +91,26 @@ body{
   background:rgba(0,0,0,.35);border-radius:999px;padding:6px 16px;
   transition:opacity .4s;
 }
+#aps-presenter-inline{
+  position:fixed;right:16px;bottom:72px;width:380px;max-height:60vh;
+  display:flex;flex-direction:column;gap:10px;overflow:auto;
+  padding:16px 18px;border-radius:14px;color:#E5E7EB;font-size:14px;
+  background:rgba(15,17,21,.94);border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 18px 48px rgba(0,0,0,.5);
+}
+#aps-presenter-inline[hidden]{display:none;}
+.aps-p-head{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+#aps-p-timer{font-variant-numeric:tabular-nums;font-size:20px;font-weight:700;}
+.aps-p-meta{font-size:12.5px;color:rgba(229,231,235,.7);}
+.aps-p-notes{
+  flex:1;white-space:pre-wrap;line-height:1.7;font-size:15px;
+  border-top:1px solid rgba(255,255,255,.14);padding-top:10px;
+}
+.aps-p-foot{font-size:11.5px;line-height:1.6;color:rgba(229,231,235,.5);}
+
 @media print{
   html,body{background:#fff;}
-  #aps-bar,#aps-hint,#aps-progress{display:none;}
+  #aps-bar,#aps-hint,#aps-progress,#aps-presenter-inline{display:none;}
   .aps-slide{display:block;position:relative;page-break-after:always;}
   #aps-stage{transform:none !important;box-shadow:none;height:auto;}
 }
@@ -130,7 +147,127 @@ function navigationScript(total: number): string {
     if (next < 0 || next >= total) return;
     index = next;
     render();
+    updatePresenter();
   }
+
+  /* 講者檢視 -------------------------------------------------------- */
+  var inline = document.getElementById('aps-presenter-inline');
+  var presenterWin = null;
+  var presenterOn = false;
+  var startedAt = Date.now();
+  var timerId = null;
+
+  function slideInfo(i){
+    var s = slides[i];
+    if (!s) return null;
+    return { title: s.getAttribute('data-title') || '', notes: s.getAttribute('data-notes') || '' };
+  }
+
+  function pad2(n){ return (n < 10 ? '0' : '') + n; }
+
+  function elapsedText(){
+    var ms = Date.now() - startedAt;
+    var sec = Math.floor((ms > 0 ? ms : 0) / 1000);
+    var h = Math.floor(sec / 3600);
+    var m = Math.floor((sec % 3600) / 60);
+    var r = sec % 60;
+    return h > 0 ? h + ':' + pad2(m) + ':' + pad2(r) : pad2(m) + ':' + pad2(r);
+  }
+
+  function writeShell(doc){
+    doc.open();
+    doc.write(
+      '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8" />' +
+      '<title>講者檢視</title><style>' +
+      'html,body{margin:0;height:100%;background:#0F1115;color:#E5E7EB;' +
+      'font-family:Arial,"Microsoft JhengHei","PingFang TC",sans-serif;}' +
+      '.wrap{display:flex;flex-direction:column;height:100%;padding:24px;gap:16px;box-sizing:border-box;}' +
+      '.top{display:flex;align-items:baseline;justify-content:space-between;gap:16px;}' +
+      '.timer{font-size:44px;font-weight:700;font-variant-numeric:tabular-nums;}' +
+      '.counter{font-size:16px;color:rgba(229,231,235,.7);}' +
+      '.title{font-size:22px;font-weight:700;}' +
+      '.notes{flex:1;overflow:auto;white-space:pre-wrap;line-height:1.8;font-size:22px;' +
+      'border-top:1px solid rgba(255,255,255,.15);padding-top:16px;}' +
+      '.next{font-size:15px;color:rgba(229,231,235,.65);border-top:1px solid rgba(255,255,255,.12);padding-top:12px;}' +
+      '.tip{font-size:12px;color:rgba(229,231,235,.45);}' +
+      '</style></head><body><div class="wrap">' +
+      '<div class="top"><div><div class="counter" id="p-counter"></div>' +
+      '<div class="title" id="p-title"></div></div><div class="timer" id="p-timer">00:00</div></div>' +
+      '<div class="notes" id="p-notes"></div>' +
+      '<div class="next" id="p-next"></div>' +
+      '<div class="tip">把這個視窗留在自己的螢幕，簡報視窗放到投影機並按 F 全螢幕。換頁請在簡報視窗操作。</div>' +
+      '</div></body></html>'
+    );
+    doc.close();
+  }
+
+  function setText(doc, id, value){
+    var node = doc.getElementById(id);
+    if (node) node.textContent = value;
+  }
+
+  function updatePresenter(){
+    if (!presenterOn) return;
+    var cur = slideInfo(index) || { title: '', notes: '' };
+    var nxt = slideInfo(index + 1);
+    var notes = cur.notes || '這一頁沒有備註';
+    var counter = '第 ' + (index + 1) + ' / ' + total + ' 頁';
+    var nextText = nxt ? '下一頁：' + (nxt.title || '（未命名）') : '這是最後一頁';
+    var time = elapsedText();
+
+    if (presenterWin && !presenterWin.closed) {
+      var doc = presenterWin.document;
+      setText(doc, 'p-counter', counter);
+      setText(doc, 'p-title', cur.title);
+      setText(doc, 'p-notes', notes);
+      setText(doc, 'p-next', nextText);
+      setText(doc, 'p-timer', time);
+      return;
+    }
+    if (inline && !inline.hidden) {
+      setText(document, 'aps-p-counter', counter);
+      setText(document, 'aps-p-next', nextText);
+      setText(document, 'aps-p-notes', notes);
+      setText(document, 'aps-p-timer', time);
+    }
+  }
+
+  function openPresenter(){
+    presenterOn = true;
+    startedAt = Date.now();
+    try { presenterWin = window.open('', 'aps-presenter', 'width=980,height=720'); } catch (err) { presenterWin = null; }
+    if (presenterWin && presenterWin.document) {
+      writeShell(presenterWin.document);
+      if (inline) inline.hidden = true;
+    } else {
+      // 被瀏覽器擋掉時，退回顯示在同一個畫面上的面板
+      presenterWin = null;
+      if (inline) {
+        inline.hidden = false;
+        setText(document, 'aps-p-foot',
+          '瀏覽器擋掉了獨立視窗，所以改顯示在這裡。若投影是「複製螢幕」，觀眾也會看到。' +
+          '在網址列右側允許彈出式視窗後，再按一次 N 就會開成獨立視窗。');
+      }
+    }
+    if (!timerId) timerId = setInterval(updatePresenter, 500);
+    updatePresenter();
+  }
+
+  function closePresenter(){
+    presenterOn = false;
+    if (presenterWin && !presenterWin.closed) presenterWin.close();
+    presenterWin = null;
+    if (inline) inline.hidden = true;
+    if (timerId) { clearInterval(timerId); timerId = null; }
+  }
+
+  function togglePresenter(){
+    if (presenterOn) closePresenter(); else openPresenter();
+  }
+
+  window.addEventListener('pagehide', function(){
+    if (presenterWin && !presenterWin.closed) presenterWin.close();
+  });
 
   function fit(){
     var k = Math.min(window.innerWidth / stage.offsetWidth, window.innerHeight / stage.offsetHeight);
@@ -150,8 +287,10 @@ function navigationScript(total: number): string {
       case 'Home': go(0); e.preventDefault(); break;
       case 'End': go(total - 1); e.preventDefault(); break;
       case 'f': case 'F': toggleFullscreen(); e.preventDefault(); break;
+      case 'n': case 'N': togglePresenter(); e.preventDefault(); break;
       case 'Escape':
         if (document.fullscreenElement) { document.exitFullscreen(); }
+        else if (presenterOn) { closePresenter(); }
         break;
       default: break;
     }
@@ -163,6 +302,8 @@ function navigationScript(total: number): string {
   if (prev) prev.addEventListener('click', function(){ go(index - 1); });
   if (next) next.addEventListener('click', function(){ go(index + 1); });
   if (full) full.addEventListener('click', toggleFullscreen);
+  var presenterBtn = document.getElementById('aps-presenter');
+  if (presenterBtn) presenterBtn.addEventListener('click', togglePresenter);
 
   window.addEventListener('resize', fit);
   window.addEventListener('hashchange', function(){ go(hashIndex()); });
@@ -186,7 +327,9 @@ export function renderPresentationToHtml(
       const body = sortedElements(slide.elements).map(renderElementToHtml).join('\n      ');
       return `    <section class="aps-slide${i === 0 ? ' is-active' : ''}" id="aps-slide-${escapeHtml(
         slide.id,
-      )}" data-index="${i + 1}" aria-label="${escapeHtml(slide.title)}" style="background:${escapeHtml(
+      )}" data-index="${i + 1}" aria-label="${escapeHtml(slide.title)}" data-title="${escapeHtml(
+        slide.title,
+      )}" data-notes="${escapeHtml(slide.notes)}" style="background:${escapeHtml(
         slide.background,
       )}">
       ${body}
@@ -200,11 +343,21 @@ export function renderPresentationToHtml(
       <button id="aps-prev" type="button">← 上一頁</button>
       <button id="aps-next" type="button">下一頁 →</button>
       <button id="aps-full" type="button">F 全螢幕</button>
+      <button id="aps-presenter" type="button">N 講者檢視</button>
     </div>
     <div id="aps-counter">第 1 / ${presentation.slides.length} 頁</div>
   </div>
   <div id="aps-progress"></div>
-  <div id="aps-hint">← → 換頁　空白鍵下一頁　F 全螢幕　Esc 離開全螢幕</div>`
+  <div id="aps-hint">← → 換頁　空白鍵下一頁　F 全螢幕　N 講者檢視　Esc 離開全螢幕</div>
+  <aside id="aps-presenter-inline" hidden>
+    <div class="aps-p-head">
+      <strong>講者檢視</strong>
+      <span id="aps-p-timer">00:00</span>
+    </div>
+    <div class="aps-p-meta"><span id="aps-p-counter"></span>　<span id="aps-p-next"></span></div>
+    <div class="aps-p-notes" id="aps-p-notes"></div>
+    <div class="aps-p-foot" id="aps-p-foot"></div>
+  </aside>`
     : '';
 
   const branding = includeBranding
