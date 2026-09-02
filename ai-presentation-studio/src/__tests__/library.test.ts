@@ -3,6 +3,7 @@ import { createPresentation, createSlide } from '../model/factory';
 import {
   LIBRARY_KEY,
   deleteDeck,
+  libraryUsageBytes,
   listDecks,
   loadDeck,
   upsertDeck,
@@ -103,5 +104,11 @@ describe('簡報清單', () => {
     };
 
     expect(upsertDeck(full, deck('存不下'))).toBe(false);
+  });
+
+  it('回報清單佔用的空間', () => {
+    expect(libraryUsageBytes(storage)).toBe(0);
+    upsertDeck(storage, deck('佔位'));
+    expect(libraryUsageBytes(storage)).toBeGreaterThan(0);
   });
 });

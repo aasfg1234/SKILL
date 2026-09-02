@@ -9,6 +9,7 @@ import { Icon } from './Icon';
 import { SLIDE_LAYOUTS } from '../model/layouts';
 import { findInPresentation } from '../model/search';
 import { FONT_CHOICES, fontIdOfStack, fontStackOf } from '../lib/fonts';
+import { libraryUsageBytes } from '../lib/library';
 
 function Modal({
   title,
@@ -522,6 +523,11 @@ function LibraryDialog() {
   const decks = editorStore.decks();
   const currentId = state.presentation.metadata.id;
   const [name, setName] = useState('');
+  const usageMb = (
+    (globalThis.localStorage ? libraryUsageBytes(globalThis.localStorage) : 0) /
+    1024 /
+    1024
+  ).toFixed(1);
 
   return (
     <Modal
@@ -613,8 +619,9 @@ function LibraryDialog() {
         </ul>
       )}
       <p className="mt-3 text-[11px] leading-relaxed text-ink-3">
-        瀏覽器的空間有限（約 5～10 MB）。內嵌很多圖片時可能存不下，
-        建議把不常用的簡報「匯出 JSON」留存後，從這裡刪掉。
+        目前這份清單佔用約 {usageMb} MB。
+        瀏覽器給每個網站的空間有上限（Chrome／Edge 實測約 49 MB），內嵌很多圖片會很快用完。
+        建議把不常用的簡報「匯出 JSON」留存到自己的資料夾後，從這裡刪掉。
       </p>
     </Modal>
   );

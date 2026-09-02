@@ -7,7 +7,10 @@ import type { Presentation } from '../model/types';
  * 這裡把多份簡報一起存在同一個鍵底下，用 `metadata.id` 當識別。
  *
  * 刻意不引入 IndexedDB：localStorage 已經夠用，也維持「單機、無依賴」的設計。
- * 代價是有容量上限（各家瀏覽器約 5～10 MB），內嵌大量圖片時可能存不下，
+ *
+ * 容量上限依瀏覽器而定。在 Chromium 實測約為 49 MB（寫得下 49 MB，50 MB 失敗）。
+ * 舊資料常說的「5～10 MB」是較早期的值，新版 Chromium 已經放寬。
+ * 不論上限多少都可能被塞滿（內嵌圖片很吃空間），
  * 因此 `upsertDeck` 會回報成功或失敗，由呼叫端提示使用者。
  */
 
@@ -75,6 +78,12 @@ export function upsertDeck(storage: StorageLike, presentation: Presentation): bo
 /** 讀回一份完整的簡報；找不到回傳 null。 */
 export function loadDeck(storage: StorageLike, id: string): Presentation | null {
   return read(storage).decks.find((deck) => deck.id === id)?.presentation ?? null;
+}
+
+/** 目前簡報清單佔用多少位元組，用來提示使用者還剩多少空間。 */
+export function libraryUsageBytes(storage: StorageLike): number {
+  const raw = storage.getItem(LIBRARY_KEY);
+  return raw ? raw.length : 0;
 }
 
 /** 刪除一份簡報。 */
