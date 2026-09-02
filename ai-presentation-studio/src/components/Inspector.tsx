@@ -21,7 +21,7 @@ import {
   removeTableRow,
 } from '../model/table';
 import { FONT_CHOICES, fontIdOfStack, fontStackOf } from '../lib/fonts';
-import { CHART_TYPES } from '../model/chart';
+import { CHART_TYPES, parsePastedSeries } from '../model/chart';
 
 /** 右側屬性面板：位置、大小、樣式與 AI 設定。 */
 
@@ -596,6 +596,26 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
               className="field-input"
               value={el.title}
               onChange={(e) => update({ title: e.target.value })}
+            />
+          </Field>
+
+          <Field label="從 Excel／試算表貼上（兩欄：名稱、數值）">
+            <textarea
+              className="field-input min-h-[64px] resize-y font-mono text-[11px]"
+              placeholder="從試算表選取兩欄，複製之後直接貼在這裡"
+              onPaste={(e) => {
+                const text = e.clipboardData.getData('text');
+                const parsed = parsePastedSeries(text);
+                if (!parsed) return;
+                e.preventDefault();
+                update({ labels: parsed.labels, values: parsed.values });
+                e.currentTarget.value = '';
+                editorStore.toast({
+                  tone: 'success',
+                  title: `已帶入 ${parsed.labels.length} 筆資料`,
+                });
+              }}
+              onChange={() => {}}
             />
           </Field>
 

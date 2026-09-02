@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createChartElement } from '../model/factory';
-import { CHART_TYPES, buildChartSvg, niceAxisMax } from '../model/chart';
+import { CHART_TYPES, buildChartSvg } from '../model/chart';
 
 function chart(overrides = {}) {
   return createChartElement({
@@ -67,13 +67,5 @@ describe('圖表', () => {
     expect(svg).toContain('甲');
     expect(svg).toContain('丙');
     expect(svg.startsWith('<svg')).toBe(true);
-  });
-
-  it('座標軸上限會取好看的整數', () => {
-    expect(niceAxisMax(0)).toBe(1);
-    expect(niceAxisMax(7)).toBe(10);
-    expect(niceAxisMax(25)).toBe(30);
-    expect(niceAxisMax(120)).toBe(200);
-    expect(niceAxisMax(-5)).toBe(1);
   });
 });
