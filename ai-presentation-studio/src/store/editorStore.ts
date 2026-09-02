@@ -48,6 +48,14 @@ export type DialogState =
   | { kind: 'ai-prompt'; text: string }
   | { kind: 'settings' }
   | { kind: 'help' }
+  | {
+      kind: 'confirm';
+      title: string;
+      message: string;
+      confirmLabel: string;
+      danger?: boolean;
+      onConfirm: () => void;
+    }
   | null;
 
 export interface EditorState {
@@ -370,14 +378,51 @@ class EditorStore {
   }
 
   addSlide(afterSlideId?: string): void {
-    const slide = createSlide({ title: `投影片 ${this.state.presentation.slides.length + 1}` });
+    // 用插入後的頁次命名，不要用總張數。插在第 3 張卻叫「投影片 6」很難懂。
+    const index = afterSlideId
+      ? this.state.presentation.slides.findIndex((s) => s.id === afterSlideId) + 1
+      : this.state.presentation.slides.length;
+    const slide = createSlide({ title: `投影片 ${index + 1}` });
     this.commit((draft) => {
-      const index = afterSlideId
-        ? draft.slides.findIndex((s) => s.id === afterSlideId) + 1
-        : draft.slides.length;
       draft.slides.splice(index, 0, slide);
     });
     this.set({ currentSlideId: slide.id, selectedIds: [] });
+  }
+
+  /** 刪除投影片前先問過。真正的刪除仍然走 deleteSlide，因此可以復原。 */
+  requestDeleteSlide(slideId: string): void {
+    if (this.state.presentation.slides.length <= 1) {
+      this.toast({ tone: 'warning', title: '至少要保留一張投影片' });
+      return;
+    }
+    const slide = this.state.presentation.slides.find((s) => s.id === slideId);
+    if (!slide) return;
+    this.openDialog({
+      kind: 'confirm',
+      title: '刪除投影片',
+      message: `確定要刪除「${slide.title}」嗎？刪除後可以按 Ctrl+Z 復原。`,
+      confirmLabel: '刪除',
+      danger: true,
+      onConfirm: () => this.deleteSlide(slideId),
+    });
+  }
+
+  /** 通用確認對話框，取代瀏覽器原生的 confirm()。 */
+  confirm(options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    danger?: boolean;
+    onConfirm: () => void;
+  }): void {
+    this.openDialog({
+      kind: 'confirm',
+      title: options.title,
+      message: options.message,
+      confirmLabel: options.confirmLabel ?? '確定',
+      danger: options.danger,
+      onConfirm: options.onConfirm,
+    });
   }
 
   deleteSlide(slideId: string): void {
@@ -386,12 +431,18 @@ class EditorStore {
       return;
     }
     const index = this.state.presentation.slides.findIndex((s) => s.id === slideId);
+    const title = this.state.presentation.slides[index]?.title ?? '';
     this.commit((draft) => {
       draft.slides = draft.slides.filter((s) => s.id !== slideId);
     });
     const slides = this.state.presentation.slides;
     const next = slides[Math.min(index, slides.length - 1)];
     this.set({ currentSlideId: next.id, selectedIds: [] });
+    this.toast({
+      tone: 'info',
+      title: `已刪除投影片「${title}」`,
+      detail: '按 Ctrl+Z 可以復原。',
+    });
   }
 
   duplicateSlide(slideId: string): void {
@@ -614,6 +665,11 @@ class EditorStore {
     if (source.length === 0) return;
     this.clipboard = structuredClone(source);
     this.toast({ tone: 'info', title: `已複製 ${source.length} 個元素` });
+  }
+
+  /** 剪貼簿裡有沒有東西，右鍵選單用來決定要不要顯示「貼上」。 */
+  canPaste(): boolean {
+    return this.clipboard.length > 0;
   }
 
   paste(): void {

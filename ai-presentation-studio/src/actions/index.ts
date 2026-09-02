@@ -229,21 +229,27 @@ export function exportMockCompleted(): void {
 }
 
 export function resetToDemo(): void {
-  if (
-    !globalThis.confirm?.(
-      '確定要重新載入示範簡報嗎？目前的內容將被取代（此動作無法復原）。',
-    )
-  ) {
-    return;
-  }
-  editorStore.resetToDemo();
+  editorStore.confirm({
+    title: '重新載入示範簡報',
+    message: '目前的內容會被示範簡報取代，而且無法復原。確定要繼續嗎？',
+    confirmLabel: '重新載入',
+    danger: true,
+    onConfirm: () => editorStore.resetToDemo(),
+  });
 }
 
 export function newPresentationFromBlank(): void {
-  if (!globalThis.confirm?.('確定要建立新簡報嗎？目前的內容將被取代。')) return;
-  editorStore.replacePresentation(
-    createPresentation({ slides: [createSlide({ title: '投影片 1' })] }),
-    { resetHistory: true },
-  );
-  editorStore.toast({ tone: 'success', title: '已建立新簡報' });
+  editorStore.confirm({
+    title: '建立新簡報',
+    message: '目前的內容會被清空，換成一張空白投影片。確定要繼續嗎？',
+    confirmLabel: '建立新簡報',
+    danger: true,
+    onConfirm: () => {
+      editorStore.replacePresentation(
+        createPresentation({ slides: [createSlide({ title: '投影片 1' })] }),
+        { resetHistory: true },
+      );
+      editorStore.toast({ tone: 'success', title: '已建立新簡報' });
+    },
+  });
 }

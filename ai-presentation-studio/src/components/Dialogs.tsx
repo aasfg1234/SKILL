@@ -309,19 +309,25 @@ function SettingsDialog() {
 
 const SHORTCUTS: Array<[string, string]> = [
   ['Ctrl + Z', '復原'],
-  ['Ctrl + Shift + Z', '重做'],
+  ['Ctrl + Shift + Z / Ctrl + Y', '重做'],
   ['Ctrl + S', '儲存'],
   ['Ctrl + C / Ctrl + V', '複製 / 貼上'],
   ['Ctrl + D', '再製'],
+  ['Ctrl + A', '全選本頁'],
   ['Ctrl + G', '建立群組'],
   ['Ctrl + Shift + G', '取消群組'],
   ['Ctrl + 0', '符合視窗'],
+  ['Ctrl + 滾輪', '縮放畫布'],
   ['Delete / Backspace', '刪除選取元素'],
   ['← ↑ ↓ →', '移動元素 1px'],
   ['Shift + 方向鍵', '移動元素 10px'],
+  ['F5', '開始播放'],
   ['Esc', '取消選取 / 離開預覽'],
+  ['V / T / R / O', '切換選取 / 文字 / 矩形 / 圓形工具'],
   ['雙擊文字', '直接編輯文字'],
   ['Shift + 點選', '複選元素'],
+  ['右鍵', '開啟快捷選單'],
+  ['空白鍵 + 拖曳', '平移畫布'],
   ['Alt + 拖曳', '暫時關閉自動對齊'],
 ];
 
@@ -359,6 +365,51 @@ function HelpDialog() {
   );
 }
 
+function ConfirmDialog({
+  title,
+  message,
+  confirmLabel,
+  danger,
+  onConfirm,
+}: {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  danger?: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal
+      title={title}
+      width={440}
+      footer={
+        <>
+          <button type="button" className="tool-btn" onClick={() => editorStore.closeDialog()}>
+            取消
+          </button>
+          <button
+            type="button"
+            className="tool-btn font-bold"
+            style={
+              danger
+                ? { background: 'var(--color-danger)', color: '#fff' }
+                : { background: 'var(--color-brand)', color: 'var(--color-brand-ink)' }
+            }
+            onClick={() => {
+              editorStore.closeDialog();
+              onConfirm();
+            }}
+          >
+            {confirmLabel}
+          </button>
+        </>
+      }
+    >
+      <p className="text-[12.5px] leading-relaxed text-ink-2">{message}</p>
+    </Modal>
+  );
+}
+
 export function Dialogs() {
   const state = useEditorState();
   const dialog = state.dialog;
@@ -375,6 +426,16 @@ export function Dialogs() {
       return <SettingsDialog />;
     case 'help':
       return <HelpDialog />;
+    case 'confirm':
+      return (
+        <ConfirmDialog
+          title={dialog.title}
+          message={dialog.message}
+          confirmLabel={dialog.confirmLabel}
+          danger={dialog.danger}
+          onConfirm={dialog.onConfirm}
+        />
+      );
     default:
       return null;
   }

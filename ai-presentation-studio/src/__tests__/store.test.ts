@@ -409,4 +409,27 @@ describe('編輯器 Store', () => {
 
     expect(added?.z).toBe(highestBefore + 1);
   });
+
+  it('新投影片依照插入位置命名，不用總張數', () => {
+    editorStore.addSlide('slide-01');
+
+    const slides = editorStore.getState().presentation.slides;
+    expect(slides[1].title).toBe('投影片 2');
+  });
+
+  it('刪除投影片前會先問過，不會直接刪掉', () => {
+    const before = editorStore.getState().presentation.slides.length;
+
+    editorStore.requestDeleteSlide('slide-02');
+
+    expect(editorStore.getState().dialog?.kind).toBe('confirm');
+    expect(editorStore.getState().presentation.slides).toHaveLength(before);
+  });
+
+  it('刪除投影片後會提示可以復原', () => {
+    editorStore.deleteSlide('slide-02');
+
+    const toast = editorStore.getState().toasts.find((item) => item.title.includes('已刪除投影片'));
+    expect(toast?.detail).toContain('Ctrl+Z');
+  });
 });

@@ -13,6 +13,7 @@ export function PreviewOverlay() {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [scale, setScale] = useState(0.5);
   const [showHint, setShowHint] = useState(true);
+  const [showBar, setShowBar] = useState(true);
 
   useLayoutEffect(() => {
     const el = wrapRef.current;
@@ -29,6 +30,23 @@ export function PreviewOverlay() {
   useEffect(() => {
     const timer = setTimeout(() => setShowHint(false), 3200);
     return () => clearTimeout(timer);
+  }, []);
+
+  // 播放時控制列閒置就淡出，滑鼠一動再出現，畫面才不會一直被佔掉一條。
+  useEffect(() => {
+    let timer = window.setTimeout(() => setShowBar(false), 2600);
+    const wake = () => {
+      setShowBar(true);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setShowBar(false), 2600);
+    };
+    window.addEventListener('mousemove', wake);
+    window.addEventListener('keydown', wake);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('mousemove', wake);
+      window.removeEventListener('keydown', wake);
+    };
   }, []);
 
   useEffect(() => {
@@ -100,7 +118,10 @@ export function PreviewOverlay() {
         </div>
       )}
 
-      <div className="flex h-14 items-center justify-between px-5 text-white/80">
+      <div
+        className="flex h-14 items-center justify-between px-5 text-white/80 transition-opacity duration-300"
+        style={{ opacity: showBar ? 1 : 0, pointerEvents: showBar ? 'auto' : 'none' }}
+      >
         <div className="flex items-center gap-2">
           <button
             type="button"

@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   allocateTaskId,
   createAiComponentElement,
@@ -14,6 +14,7 @@ import { pickImageFile } from '../lib/files';
 import { suggestedFormat } from '../lib/labels';
 import { ElementView, sortByZ } from './ElementView';
 import { LAYER } from '../lib/layers';
+import { buildContextMenu, type ContextMenuItem } from '../lib/contextMenu';
 import { Icon } from './Icon';
 
 /** 畫布：真正的選取、拖曳、縮放、對齊與繪製，全部以指標事件實作。 */
@@ -236,7 +237,28 @@ export function growTextHeight(
   return Math.min(wanted, room);
 }
 
-/** 計算選取元素壓到幾個可編輯元素；鎖定背景不算。 */
+/** 滾輪縮放：往上一格放大一成，往下一格縮小一成。 */
+export function zoomWithWheel(zoom: number, deltaY: number): number {
+  const factor = deltaY < 0 ? 1.1 : 1 / 1.1;
+  return Math.min(3, Math.max(0.05, zoom * factor));
+}
+
+/** 被壓住的比例：交集面積佔「被壓住那個元素」的幾成。 */
+function coveredRatio(cover: Rect, target: Rect): number {
+  const w = Math.min(cover.x + cover.width, target.x + target.width) - Math.max(cover.x, target.x);
+  const h = Math.min(cover.y + cover.height, target.y + target.height) - Math.max(cover.y, target.y);
+  if (w <= 0 || h <= 0) return 0;
+  const area = target.width * target.height;
+  return area > 0 ? (w * h) / area : 0;
+}
+
+/**
+ * 只有「幾乎整個蓋住」才算壓住，這樣才不會一相交就警告。
+ * 元件坐在整頁背景上、或兩個區塊邊角相碰，都是正常排版，不該跳警告。
+ */
+const OVERLAP_COVER_RATIO = 0.6;
+
+/** 計算選取元素壓住幾個可編輯元素；鎖定背景不算。 */
 export function countSelectedOverlaps(elements: SlideElement[], selectedIds: string[]): number {
   const selected = new Set(selectedIds);
   const hits = new Set<string>();
@@ -251,7 +273,7 @@ export function countSelectedOverlaps(elements: SlideElement[], selectedIds: str
       ) {
         continue;
       }
-      if (intersects(current, other)) hits.add(other.id);
+      if (coveredRatio(current, other) >= OVERLAP_COVER_RATIO) hits.add(other.id);
     }
   }
   return hits.size;
@@ -270,6 +292,8 @@ export function Canvas() {
   const [drawing, setDrawing] = useState<Rect | null>(null);
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
   const [motionInfo, setMotionInfo] = useState<(Rect & { rotation?: number }) | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  const spaceHeld = useRef(false);
 
   const zoom = state.zoom;
 
@@ -435,6 +459,163 @@ export function Canvas() {
     editorStore.beginTransaction();
     (e.target as Element).setPointerCapture?.(e.pointerId);
   };
+
+  // Ctrl + 滾輪縮放。React 的 onWheel 是被動監聽，擋不掉瀏覽器縮放，所以直接掛原生事件。
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      editorStore.setZoom(zoomWithWheel(editorStore.getState().zoom, e.deltaY));
+    };
+    wrap.addEventListener('wheel', onWheel, { passive: false });
+    return () => wrap.removeEventListener('wheel', onWheel);
+  }, []);
+
+  // 按住空白鍵拖曳，或用滑鼠中鍵拖曳，都可以平移畫布。
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+
+    const isTyping = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      return (
+        el.tagName === 'INPUT' ||
+        el.tagName === 'TEXTAREA' ||
+        el.tagName === 'SELECT' ||
+        el.isContentEditable
+      );
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || isTyping(e.target)) return;
+      spaceHeld.current = true;
+      wrap.style.cursor = 'grab';
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      spaceHeld.current = false;
+      wrap.style.cursor = '';
+    };
+
+    let panning: { x: number; y: number; left: number; top: number } | null = null;
+
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 1 && !(e.button === 0 && spaceHeld.current)) return;
+      e.preventDefault();
+      panning = { x: e.clientX, y: e.clientY, left: wrap.scrollLeft, top: wrap.scrollTop };
+      wrap.style.cursor = 'grabbing';
+      wrap.setPointerCapture?.(e.pointerId);
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!panning) return;
+      wrap.scrollLeft = panning.left - (e.clientX - panning.x);
+      wrap.scrollTop = panning.top - (e.clientY - panning.y);
+    };
+    const onUp = () => {
+      if (!panning) return;
+      panning = null;
+      wrap.style.cursor = spaceHeld.current ? 'grab' : '';
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    wrap.addEventListener('pointerdown', onDown);
+    wrap.addEventListener('pointermove', onMove);
+    wrap.addEventListener('pointerup', onUp);
+    wrap.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      wrap.removeEventListener('pointerdown', onDown);
+      wrap.removeEventListener('pointermove', onMove);
+      wrap.removeEventListener('pointerup', onUp);
+      wrap.removeEventListener('pointercancel', onUp);
+    };
+  }, []);
+
+  const openContextMenu = (e: React.MouseEvent, element?: SlideElement) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const store = editorStore.getState();
+    if (element) {
+      if (!store.selectedIds.includes(element.id)) editorStore.selectElement(element.id);
+    } else {
+      editorStore.clearSelection();
+    }
+    const next = editorStore.getState();
+    const chosen = editorStore.selectedElements();
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: buildContextMenu({
+        hasSelection: next.selectedIds.length > 0,
+        selectedCount: next.selectedIds.length,
+        canPaste: editorStore.canPaste(),
+        canUngroup: chosen.some((item) => item.groupId),
+        locked: chosen.some((item) => item.locked),
+        hasElements: (slide?.elements.length ?? 0) > 0,
+      }),
+    });
+  };
+
+  const runContextMenu = (id: string) => {
+    setMenu(null);
+    const chosen = editorStore.selectedElements();
+    switch (id) {
+      case 'copy':
+        editorStore.copySelection();
+        break;
+      case 'paste':
+        editorStore.paste();
+        break;
+      case 'duplicate':
+        editorStore.duplicateSelected();
+        break;
+      case 'bring-front':
+        editorStore.reorder('front');
+        break;
+      case 'send-back':
+        editorStore.reorder('back');
+        break;
+      case 'group':
+        editorStore.groupSelected();
+        break;
+      case 'ungroup':
+        editorStore.ungroupSelected();
+        break;
+      case 'lock':
+        editorStore.updateSelected({ locked: !chosen.some((item) => item.locked) });
+        break;
+      case 'delete':
+        editorStore.deleteSelected();
+        break;
+      case 'select-all':
+        editorStore.select((slide?.elements ?? []).map((item) => item.id));
+        break;
+      default:
+        break;
+    }
+  };
+
+  // 選單開著時，點別處或按 Esc 就關掉。
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenu(null);
+    };
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', close);
+    };
+  }, [menu]);
 
   const onStagePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -874,6 +1055,7 @@ export function Canvas() {
             margin: `${(height * zoom - height) / 2}px ${(width * zoom - width) / 2}px`,
           }}
           onPointerDown={onStagePointerDown}
+          onContextMenu={(e) => openContextMenu(e)}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
@@ -882,6 +1064,7 @@ export function Canvas() {
             <div
               key={el.id}
               onPointerDown={(e) => onElementPointerDown(e, el)}
+              onContextMenu={(e) => openContextMenu(e, el)}
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 if (el.type === 'text' && !el.locked) {
@@ -1115,8 +1298,8 @@ export function Canvas() {
             />
           ))}
 
-          {/* 選取文字後就近顯示常用工具，不用一直移到右側面板 */}
-          {single?.type === 'text' && !single.locked && !editing && (
+          {/* 選取或編輯文字時都就近顯示常用工具，不用一直移到右側面板 */}
+          {single?.type === 'text' && !single.locked && (
             <div
               className="panel-card flex items-center gap-1 p-1.5 shadow-xl"
               aria-label="文字快速工具列"
@@ -1295,6 +1478,42 @@ export function Canvas() {
           )}
         </div>
       </div>
+
+      {menu && (
+        <div
+          className="panel-card aps-fade-in fixed min-w-[196px] p-1.5 shadow-xl"
+          role="menu"
+          aria-label="快捷選單"
+          style={{
+            left: Math.min(menu.x, window.innerWidth - 216),
+            top: Math.min(menu.y, window.innerHeight - 40 - menu.items.length * 30),
+            zIndex: LAYER.menu,
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {menu.items.map((item, index) =>
+            item.separator ? (
+              <div key={`${item.id}-${index}`} className="my-1.5 h-px bg-line" />
+            ) : (
+              <button
+                key={item.id}
+                type="button"
+                role="menuitem"
+                disabled={item.disabled}
+                onClick={() => runContextMenu(item.id)}
+                className="flex w-full items-center gap-3 rounded-lg px-2.5 py-1.5 text-left text-[12px] transition hover:bg-panel-2 disabled:cursor-not-allowed disabled:opacity-40"
+                style={item.danger ? { color: 'var(--color-danger)' } : undefined}
+              >
+                <span className="flex-1">{item.label}</span>
+                {item.shortcut && (
+                  <span className="font-mono text-[10.5px] text-ink-3">{item.shortcut}</span>
+                )}
+              </button>
+            ),
+          )}
+        </div>
+      )}
     </div>
   );
 }

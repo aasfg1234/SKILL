@@ -190,6 +190,7 @@ export function SlideList() {
                     type="button"
                     className="tool-btn px-1 py-0.5"
                     title="上移"
+                    aria-label={`把第 ${index + 1} 張投影片上移`}
                     disabled={index === 0}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -202,6 +203,7 @@ export function SlideList() {
                     type="button"
                     className="tool-btn px-1 py-0.5"
                     title="下移"
+                    aria-label={`把第 ${index + 1} 張投影片下移`}
                     disabled={index === slides.length - 1}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -214,6 +216,7 @@ export function SlideList() {
                     type="button"
                     className="tool-btn px-1 py-0.5"
                     title="複製投影片"
+                    aria-label={`複製第 ${index + 1} 張投影片`}
                     onClick={(e) => {
                       e.stopPropagation();
                       editorStore.duplicateSlide(slide.id);
@@ -225,10 +228,11 @@ export function SlideList() {
                     type="button"
                     className="tool-btn px-1 py-0.5"
                     title="刪除投影片"
+                    aria-label={`刪除第 ${index + 1} 張投影片`}
                     style={{ color: 'var(--color-danger)' }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      editorStore.deleteSlide(slide.id);
+                      editorStore.requestDeleteSlide(slide.id);
                     }}
                   >
                     <Icon name="trash" size={13} />
