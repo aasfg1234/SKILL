@@ -95,7 +95,8 @@ function base(kind: string, init: BaseInit, w: number, h: number) {
     opacity: init.opacity ?? 1,
     locked: init.locked ?? false,
     hidden: init.hidden ?? false,
-    z: init.z ?? 1,
+    // 0 代表「還沒決定層次」；真正的層次在加入投影片時由 addElementToSlide 指定。
+    z: init.z ?? 0,
   };
 }
 

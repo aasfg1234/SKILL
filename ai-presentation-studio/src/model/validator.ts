@@ -150,14 +150,26 @@ export function validatePresentation(presentation: Presentation): ValidationRepo
         });
       }
 
+      const radians = (el.rotation * Math.PI) / 180;
+      const visualWidth =
+        Math.abs(el.width * Math.cos(radians)) + Math.abs(el.height * Math.sin(radians));
+      const visualHeight =
+        Math.abs(el.width * Math.sin(radians)) + Math.abs(el.height * Math.cos(radians));
+      const centerX = el.x + el.width / 2;
+      const centerY = el.y + el.height / 2;
+      const visualX = centerX - visualWidth / 2;
+      const visualY = centerY - visualHeight / 2;
       const outOfBounds =
-        el.x < 0 || el.y < 0 || el.x + el.width > width || el.y + el.height > height;
+        visualX < 0 ||
+        visualY < 0 ||
+        visualX + visualWidth > width ||
+        visualY + visualHeight > height;
       if (outOfBounds) {
         report.validation.outOfBounds += 1;
         issues.push({
           code: 'ELEMENT_OUT_OF_BOUNDS',
           severity: 'warning',
-          message: `元素 ${el.id} 超出投影片範圍`,
+          message: `元素 ${el.id} 的顯示範圍超出投影片`,
           slideId: slide.id,
           elementId: el.id,
         });

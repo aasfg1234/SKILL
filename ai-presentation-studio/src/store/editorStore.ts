@@ -657,6 +657,26 @@ class EditorStore {
     });
   }
 
+  moveSlideTo(slideId: string, targetSlideId: string, position: 'before' | 'after'): void {
+    if (slideId === targetSlideId) return;
+    const currentIds = this.state.presentation.slides.map((slide) => slide.id);
+    const nextIds = currentIds.filter((id) => id !== slideId);
+    const targetIndex = nextIds.indexOf(targetSlideId);
+    if (!currentIds.includes(slideId) || targetIndex < 0) return;
+    nextIds.splice(targetIndex + (position === 'after' ? 1 : 0), 0, slideId);
+    if (nextIds.every((id, index) => id === currentIds[index])) return;
+
+    this.commit((draft) => {
+      const byId = new Map(draft.slides.map((slide) => [slide.id, slide]));
+      draft.slides = nextIds.flatMap((id) => {
+        const slide = byId.get(id);
+        return slide ? [slide] : [];
+      });
+    });
+    const index = nextIds.indexOf(slideId) + 1;
+    this.toast({ tone: 'success', title: `已將投影片移到第 ${index} 頁` });
+  }
+
   nudge(dx: number, dy: number): void {
     const ids = new Set(this.state.selectedIds);
     if (ids.size === 0) return;

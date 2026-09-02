@@ -31,6 +31,22 @@ describe('編輯器 Store', () => {
     expect(editorStore.getState().presentation.slides[1].id).toBe('slide-01');
   });
 
+  it('投影片可以拖曳到指定頁面前後並復原', () => {
+    const originalIds = editorStore.getState().presentation.slides.map((slide) => slide.id);
+
+    editorStore.moveSlideTo('slide-01', 'slide-03', 'after');
+    expect(editorStore.getState().presentation.slides.map((slide) => slide.id)).toEqual([
+      originalIds[1],
+      originalIds[2],
+      originalIds[0],
+      ...originalIds.slice(3),
+    ]);
+    expect(editorStore.getState().currentSlideId).toBe('slide-01');
+
+    editorStore.undo();
+    expect(editorStore.getState().presentation.slides.map((slide) => slide.id)).toEqual(originalIds);
+  });
+
   it('至少保留一張投影片', () => {
     editorStore.replacePresentation(
       { ...createDemoPresentation(), slides: [createDemoPresentation().slides[0]] },
@@ -375,5 +391,22 @@ describe('編輯器 Store', () => {
     expect(
       editorStore.getState().toasts.some((toast) => toast.title === '鎖定的元件不能加入群組'),
     ).toBe(true);
+  });
+
+  it('在示範簡報上新增元素時會疊到最上層，不會被既有元素蓋住', () => {
+    const slideBefore = editorStore
+      .getState()
+      .presentation.slides.find((slide) => slide.id === 'slide-01');
+    const highestBefore = Math.max(...(slideBefore?.elements ?? []).map((el) => el.z));
+
+    const drawn = createRectElement({ id: 'drawn-on-cover' });
+    editorStore.addElement(drawn, 'slide-01');
+
+    const added = editorStore
+      .getState()
+      .presentation.slides.find((slide) => slide.id === 'slide-01')
+      ?.elements.find((el) => el.id === 'drawn-on-cover');
+
+    expect(added?.z).toBe(highestBefore + 1);
   });
 });

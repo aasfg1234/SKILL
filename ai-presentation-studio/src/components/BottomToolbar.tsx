@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { editorStore, useEditorState, type ToolId } from '../store/editorStore';
 import { Icon } from './Icon';
+import { LAYER } from '../lib/layers';
 
 const TOOLS: Array<{ id: ToolId; label: string; icon: string; hint: string }> = [
   { id: 'select', label: '選取', icon: 'layers', hint: '選取、拖曳、調整大小' },
@@ -146,9 +147,10 @@ export function BottomToolbar() {
           </button>
           {arrangeOpen && (
             <div
-              className="panel-card absolute bottom-[calc(100%+8px)] right-0 z-50 w-72 p-2 shadow-xl"
+              className="panel-card absolute bottom-[calc(100%+8px)] right-0 w-72 p-2 shadow-xl"
               role="menu"
               aria-label="排列元件"
+              style={{ zIndex: LAYER.menu }}
             >
               <div className="mb-1.5 flex items-center justify-between gap-2">
                 <span className="text-[11px] font-bold text-ink-2">

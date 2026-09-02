@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { editorStore, useEditorState } from '../store/editorStore';
 import { ElementView, sortByZ } from './ElementView';
 import { Icon } from './Icon';
+import { LAYER } from '../lib/layers';
 
 /** 播放模式：只顯示投影片，不顯示任何編輯器介面。 */
 export function PreviewOverlay() {
@@ -71,7 +72,10 @@ export function PreviewOverlay() {
   if (!slide) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col" style={{ background: '#0B0D10' }}>
+    <div
+      className="fixed inset-0 flex flex-col"
+      style={{ background: '#0B0D10', zIndex: LAYER.preview }}
+    >
       <div ref={wrapRef} className="flex flex-1 items-center justify-center overflow-hidden">
         <div
           style={{

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { editorStore, useEditorState } from '../store/editorStore';
+import { LAYER } from '../lib/layers';
 import type { ValidationReport } from '../model/types';
 import type { MergeSummary } from '../model/patch';
 import { copyToClipboard } from '../lib/files';
@@ -21,7 +22,8 @@ function Modal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-6"
+      className="fixed inset-0 flex items-center justify-center bg-black/40 p-6"
+      style={{ zIndex: LAYER.dialog }}
       onClick={() => editorStore.closeDialog()}
     >
       <div
@@ -390,7 +392,8 @@ export function Toasts() {
   };
 
   return (
-    <div className="pointer-events-none fixed bottom-16 right-4 z-[130] flex w-[340px] flex-col gap-2">
+    <div className="pointer-events-none fixed bottom-16 right-4 flex w-[340px] flex-col gap-2"
+      style={{ zIndex: LAYER.toast }}>
       {state.toasts.map((toast) => (
         <div
           key={toast.id}

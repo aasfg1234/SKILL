@@ -9,7 +9,7 @@ import {
   type SlideElement,
 } from './types';
 import { sanitizeAiOutput } from './sanitize';
-import { syncAiTasks } from './factory';
+import { addElementToSlide, syncAiTasks } from './factory';
 
 /**
  * AI 回填層。
@@ -231,7 +231,7 @@ export function applyPatch(
         next = {
           ...next,
           slides: next.slides.map((s) =>
-            s.id === op.slideId ? { ...s, elements: [...s.elements, op.element] } : s,
+            s.id === op.slideId ? addElementToSlide(s, op.element) : s,
           ),
         };
         summary.applied += 1;

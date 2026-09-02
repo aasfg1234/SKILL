@@ -16,6 +16,7 @@ import {
 } from '../actions';
 import { editorStore, useEditorState } from '../store/editorStore';
 import { Icon } from './Icon';
+import { LAYER } from '../lib/layers';
 
 interface MenuItem {
   label: string;
@@ -60,8 +61,9 @@ function Menu({ label, items }: { label: string; items: MenuItem[] }) {
       </button>
       {open && (
         <div
-          className="panel-card aps-fade-in absolute left-0 top-[calc(100%+6px)] z-50 min-w-[264px] p-1.5 shadow-xl"
+          className="panel-card aps-fade-in absolute left-0 top-[calc(100%+6px)] min-w-[264px] p-1.5 shadow-xl"
           role="menu"
+          style={{ zIndex: LAYER.menu }}
         >
           {items.map((item, i) =>
             item.separator ? (

@@ -372,6 +372,14 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
       </Section>
 
       <Section title="位置與大小" icon="grid">
+        {multi ? (
+          <div
+            className="rounded-lg border px-3 py-2 text-[11px] leading-relaxed text-ink-2"
+            style={{ borderColor: 'var(--color-line)', background: 'var(--color-panel-2)' }}
+          >
+            在畫布上拖曳外框即可移動。群組可以拖曳四角縮放，也可以拖曳圓點旋轉。
+          </div>
+        ) : (
         <div className="grid grid-cols-2 gap-2">
           <Field label="X">
             <NumberInput value={el.x} onChange={(v) => update({ x: Math.round(v) })} suffix="px" />
@@ -407,6 +415,7 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
             />
           </Field>
         </div>
+        )}
 
         <div>
           <span className="mb-1 block text-[11px] text-ink-3">對齊</span>

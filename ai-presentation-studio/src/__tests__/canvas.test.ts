@@ -4,6 +4,8 @@ import {
   countSelectedOverlaps,
   findOpenPlacement,
   fitRectToCanvas,
+  growTextHeight,
+  rotateElementAroundPoint,
   scaleElementWithinBounds,
 } from '../components/Canvas';
 
@@ -93,5 +95,31 @@ describe('畫布邊界與預設位置', () => {
     expect(scaledText).toMatchObject({ x: 800, y: 500, width: 600, height: 300 });
     expect(scaledText.type === 'text' ? scaledText.fontSize : 0).toBe(80);
     expect(scaledText.type === 'text' ? scaledText.letterSpacing : 0).toBe(2);
+  });
+
+  it('整組旋轉會讓成員繞群組中心移動', () => {
+    const element = createRectElement({
+      x: 100,
+      y: 100,
+      width: 100,
+      height: 50,
+      rotation: 10,
+    });
+
+    const rotated = rotateElementAroundPoint(element, { x: 300, y: 200 }, 90);
+
+    expect(rotated).toMatchObject({ x: 325, y: 25, width: 100, height: 50, rotation: 100 });
+  });
+
+  it('文字比方塊高時，方塊會長高到剛好容納文字', () => {
+    expect(growTextHeight({ y: 100, height: 140 }, 320, 1080)).toBe(320);
+  });
+
+  it('文字塞得下時，方塊高度不變', () => {
+    expect(growTextHeight({ y: 100, height: 140 }, 90, 1080)).toBe(140);
+  });
+
+  it('長高時不會超出投影片底部', () => {
+    expect(growTextHeight({ y: 900, height: 140 }, 600, 1080)).toBe(180);
   });
 });

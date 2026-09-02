@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoPresentation } from '../model/demo';
 import {
+  addElementToSlide,
   allocateTaskId,
   cloneSlide,
   createAiComponentElement,
+  createRectElement,
+  createSlide,
   createTextElement,
   syncAiTasks,
 } from '../model/factory';
@@ -119,6 +122,24 @@ describe('Validator', () => {
     expect(report.status).toBe('warning');
   });
 
+  it('旋轉後的顯示範圍超出投影片時會警告', () => {
+    const p = createDemoPresentation();
+    p.slides[0].elements.push(
+      createTextElement({
+        id: 'el-rotated-out',
+        x: 700,
+        y: 100,
+        width: 1200,
+        height: 100,
+        rotation: 90,
+      }),
+    );
+    const report = validatePresentation(p);
+
+    expect(report.validation.outOfBounds).toBe(1);
+    expect(report.issues.some((issue) => issue.elementId === 'el-rotated-out')).toBe(true);
+  });
+
   it('偵測寬高不合法的元素與簡報', () => {
     const p = createDemoPresentation();
     p.settings.width = 0;
@@ -147,5 +168,32 @@ describe('Validator', () => {
     const good = parsePresentationJson(JSON.stringify(createDemoPresentation()));
     expect(good.ok).toBe(true);
     expect(good.presentation?.slides).toHaveLength(5);
+  });
+
+  it('新增的元素會疊在既有元素的最上層', () => {
+    let slide = createSlide({ title: '層次測試' });
+
+    slide = addElementToSlide(slide, createRectElement({ id: 'first' }));
+    slide = addElementToSlide(slide, createTextElement({ id: 'second' }));
+    slide = addElementToSlide(slide, createRectElement({ id: 'third' }));
+
+    expect(slide.elements.map((el) => el.z)).toEqual([1, 2, 3]);
+  });
+
+  it('加到已有高層次元素的投影片時，仍然疊在最上層', () => {
+    let slide = createSlide({ title: '層次測試' });
+    slide = addElementToSlide(slide, createRectElement({ id: 'background', z: 1 }));
+    slide = addElementToSlide(slide, createTextElement({ id: 'title', z: 9 }));
+
+    slide = addElementToSlide(slide, createRectElement({ id: 'new' }));
+
+    expect(slide.elements.find((el) => el.id === 'new')?.z).toBe(10);
+  });
+
+  it('明確指定的 z 會被保留，不會被覆蓋', () => {
+    let slide = createSlide({ title: '層次測試' });
+    slide = addElementToSlide(slide, createRectElement({ id: 'keep-me', z: 42 }));
+
+    expect(slide.elements[0].z).toBe(42);
   });
 });

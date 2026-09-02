@@ -13,6 +13,7 @@ import { editorStore, useEditorState, type ToolId } from '../store/editorStore';
 import { pickImageFile } from '../lib/files';
 import { suggestedFormat } from '../lib/labels';
 import { ElementView, sortByZ } from './ElementView';
+import { LAYER } from '../lib/layers';
 import { Icon } from './Icon';
 
 /** 畫布：真正的選取、拖曳、縮放、對齊與繪製，全部以指標事件實作。 */
@@ -37,6 +38,14 @@ interface ResizeState {
   isGroup: boolean;
 }
 
+interface RotateState {
+  kind: 'rotate';
+  centerX: number;
+  centerY: number;
+  startAngle: number;
+  originals: Map<string, SlideElement>;
+}
+
 interface MarqueeState {
   kind: 'marquee';
   startX: number;
@@ -51,7 +60,7 @@ interface DrawState {
   tool: ToolId;
 }
 
-type Interaction = DragState | ResizeState | MarqueeState | DrawState | null;
+type Interaction = DragState | ResizeState | RotateState | MarqueeState | DrawState | null;
 
 interface Rect {
   x: number;
@@ -82,6 +91,54 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function elementVisualBounds(element: SlideElement): Rect {
+  const radians = (element.rotation * Math.PI) / 180;
+  const visualWidth =
+    Math.abs(element.width * Math.cos(radians)) +
+    Math.abs(element.height * Math.sin(radians));
+  const visualHeight =
+    Math.abs(element.width * Math.sin(radians)) +
+    Math.abs(element.height * Math.cos(radians));
+  const centerX = element.x + element.width / 2;
+  const centerY = element.y + element.height / 2;
+  return {
+    x: centerX - visualWidth / 2,
+    y: centerY - visualHeight / 2,
+    width: visualWidth,
+    height: visualHeight,
+  };
+}
+
+function elementsVisualBounds(elements: SlideElement[]): Rect | null {
+  if (elements.length === 0) return null;
+  const boxes = elements.map(elementVisualBounds);
+  const minX = Math.min(...boxes.map((box) => box.x));
+  const minY = Math.min(...boxes.map((box) => box.y));
+  const maxX = Math.max(...boxes.map((box) => box.x + box.width));
+  const maxY = Math.max(...boxes.map((box) => box.y + box.height));
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+/** 讓元素中心繞著群組中心旋轉，並同步增加元素本身的角度。 */
+export function rotateElementAroundPoint(
+  element: SlideElement,
+  center: { x: number; y: number },
+  degrees: number,
+): SlideElement {
+  const radians = (degrees * Math.PI) / 180;
+  const sourceX = element.x + element.width / 2;
+  const sourceY = element.y + element.height / 2;
+  const dx = sourceX - center.x;
+  const dy = sourceY - center.y;
+  const nextCenterX = center.x + dx * Math.cos(radians) - dy * Math.sin(radians);
+  const nextCenterY = center.y + dx * Math.sin(radians) + dy * Math.cos(radians);
+  const copy = structuredClone(element);
+  copy.x = Math.round(nextCenterX - element.width / 2);
+  copy.y = Math.round(nextCenterY - element.height / 2);
+  copy.rotation = Math.round((element.rotation + degrees) * 10) / 10;
+  return copy;
+}
+
 /** 依群組外框的變化，同步換算一個成員的位置、大小與可縮放樣式。 */
 export function scaleElementWithinBounds(
   element: SlideElement,
@@ -92,10 +149,14 @@ export function scaleElementWithinBounds(
   const scaleY = from.height > 0 ? to.height / from.height : 1;
   const styleScale = Math.min(Math.abs(scaleX), Math.abs(scaleY));
   const copy = structuredClone(element);
-  copy.x = Math.round(to.x + (element.x - from.x) * scaleX);
-  copy.y = Math.round(to.y + (element.y - from.y) * scaleY);
   copy.width = Math.max(MIN_SIZE, Math.round(element.width * scaleX));
   copy.height = Math.max(MIN_SIZE, Math.round(element.height * scaleY));
+  const sourceCenterX = element.x + element.width / 2;
+  const sourceCenterY = element.y + element.height / 2;
+  const nextCenterX = to.x + (sourceCenterX - from.x) * scaleX;
+  const nextCenterY = to.y + (sourceCenterY - from.y) * scaleY;
+  copy.x = Math.round(nextCenterX - copy.width / 2);
+  copy.y = Math.round(nextCenterY - copy.height / 2);
 
   if (copy.type === 'text' && element.type === 'text') {
     copy.fontSize = Math.max(1, Math.round(element.fontSize * styleScale));
@@ -161,6 +222,20 @@ export function findOpenPlacement(
   return candidates.find(isOpen) ?? base;
 }
 
+/**
+ * 文字內容超出方塊時，把方塊撐高到剛好容納。
+ * 不會超出投影片底部；塞得下時高度不變。
+ */
+export function growTextHeight(
+  rect: { y: number; height: number },
+  contentHeight: number,
+  canvasHeight: number,
+): number {
+  const room = Math.max(1, canvasHeight - rect.y);
+  const wanted = Math.max(rect.height, Math.ceil(contentHeight));
+  return Math.min(wanted, room);
+}
+
 /** 計算選取元素壓到幾個可編輯元素；鎖定背景不算。 */
 export function countSelectedOverlaps(elements: SlideElement[], selectedIds: string[]): number {
   const selected = new Set(selectedIds);
@@ -194,7 +269,7 @@ export function Canvas() {
   const [marquee, setMarquee] = useState<Rect | null>(null);
   const [drawing, setDrawing] = useState<Rect | null>(null);
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
-  const [motionInfo, setMotionInfo] = useState<Rect | null>(null);
+  const [motionInfo, setMotionInfo] = useState<(Rect & { rotation?: number }) | null>(null);
 
   const zoom = state.zoom;
 
@@ -336,6 +411,26 @@ export function Canvas() {
       original,
       originals: new Map(targets.map((el) => [el.id, structuredClone(el)])),
       isGroup,
+    };
+    editorStore.beginTransaction();
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+  };
+
+  const onRotatePointerDown = (
+    e: React.PointerEvent,
+    targets: SlideElement[],
+    groupBounds: Rect,
+  ) => {
+    e.stopPropagation();
+    const point = toStage(e.clientX, e.clientY);
+    const centerX = groupBounds.x + groupBounds.width / 2;
+    const centerY = groupBounds.y + groupBounds.height / 2;
+    interaction.current = {
+      kind: 'rotate',
+      centerX,
+      centerY,
+      startAngle: Math.atan2(point.y - centerY, point.x - centerX),
+      originals: new Map(targets.map((el) => [el.id, structuredClone(el)])),
     };
     editorStore.beginTransaction();
     (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -511,6 +606,28 @@ export function Canvas() {
       return;
     }
 
+    if (current.kind === 'rotate') {
+      const angle = Math.atan2(point.y - current.centerY, point.x - current.centerX);
+      let degrees = ((angle - current.startAngle) * 180) / Math.PI;
+      if (e.shiftKey) degrees = Math.round(degrees / 15) * 15;
+      degrees = Math.round(degrees * 10) / 10;
+      const rotated = [...current.originals.values()].map((source) =>
+        rotateElementAroundPoint(source, { x: current.centerX, y: current.centerY }, degrees),
+      );
+      const rotatedBounds = elementsVisualBounds(rotated);
+      if (rotatedBounds) setMotionInfo({ ...rotatedBounds, rotation: degrees });
+      const byId = new Map(rotated.map((el) => [el.id, el]));
+      editorStore.transient((draft) => {
+        for (const currentSlide of draft.slides) {
+          for (const el of currentSlide.elements) {
+            const next = byId.get(el.id);
+            if (next) Object.assign(el, next);
+          }
+        }
+      });
+      return;
+    }
+
     if (current.kind === 'marquee') {
       setMarquee(normalizeRect(current.startX, current.startY, point.x, point.y));
       return;
@@ -609,7 +726,7 @@ export function Canvas() {
 
     if (!current) return;
 
-    if (current.kind === 'drag' || current.kind === 'resize') {
+    if (current.kind === 'drag' || current.kind === 'resize' || current.kind === 'rotate') {
       editorStore.endTransaction();
       return;
     }
@@ -676,19 +793,11 @@ export function Canvas() {
   const selectedGroupIds = new Set(selected.flatMap((el) => (el.groupId ? [el.groupId] : [])));
   const overlapCount = countSelectedOverlaps(slide.elements, state.selectedIds);
   const single = selected.length === 1 ? selected[0] : null;
-  const bounds =
-    selected.length > 0
-      ? {
-          x: Math.min(...selected.map((el) => el.x)),
-          y: Math.min(...selected.map((el) => el.y)),
-          width:
-            Math.max(...selected.map((el) => el.x + el.width)) -
-            Math.min(...selected.map((el) => el.x)),
-          height:
-            Math.max(...selected.map((el) => el.y + el.height)) -
-            Math.min(...selected.map((el) => el.y)),
-        }
-      : null;
+  const bounds = elementsVisualBounds(selected);
+  const selectedOutOfBounds = Boolean(
+    bounds &&
+      (bounds.x < 0 || bounds.y < 0 || bounds.x + bounds.width > width || bounds.y + bounds.height > height),
+  );
 
   const singleGroupId =
     selected.length > 1 &&
@@ -732,6 +841,17 @@ export function Canvas() {
   const handles = singleGroupId
     ? allHandles.filter((handle) => ['nw', 'ne', 'se', 'sw'].includes(handle.id))
     : allHandles;
+  const rotateHandle =
+    singleGroupId && bounds
+      ? {
+          x: bounds.x + bounds.width / 2,
+          anchorY: bounds.y > 80 / zoom ? bounds.y : bounds.y + bounds.height,
+          y:
+            bounds.y > 80 / zoom
+              ? bounds.y - 48 / zoom
+              : bounds.y + bounds.height + 48 / zoom,
+        }
+      : null;
 
   return (
     <div
@@ -851,7 +971,7 @@ export function Canvas() {
                 color: 'var(--color-brand-ink)',
                 fontSize: 11,
                 pointerEvents: 'none',
-                zIndex: 10001,
+                zIndex: LAYER.canvasBadge,
               }}
             >
               {singleGroupName
@@ -874,10 +994,34 @@ export function Canvas() {
                 color: '#fff',
                 fontSize: 11,
                 pointerEvents: 'none',
-                zIndex: 10001,
+                zIndex: LAYER.canvasBadge,
               }}
             >
               重疊 {overlapCount} 個元件
+            </div>
+          )}
+
+          {bounds && selectedOutOfBounds && (
+            <div
+              className="rounded-md px-2 py-1 font-bold"
+              role="status"
+              style={{
+                position: 'absolute',
+                left: bounds.x,
+                top: Math.min(
+                  height - 32 / zoom,
+                  bounds.y + bounds.height + (overlapCount > 0 ? 40 : 8) / zoom,
+                ),
+                transform: `scale(${1 / zoom})`,
+                transformOrigin: 'top left',
+                background: '#B45309',
+                color: '#fff',
+                fontSize: 11,
+                pointerEvents: 'none',
+                zIndex: LAYER.canvasBadge,
+              }}
+            >
+              群組超出投影片
             </div>
           )}
 
@@ -901,11 +1045,48 @@ export function Canvas() {
                 transformOrigin: 'top left',
                 borderColor: 'var(--color-line)',
                 pointerEvents: 'none',
-                zIndex: 10002,
+                zIndex: LAYER.canvasMotion,
               }}
             >
-              X {motionInfo.x}　Y {motionInfo.y}　{motionInfo.width} × {motionInfo.height}
+              {motionInfo.rotation === undefined
+                ? `X ${Math.round(motionInfo.x)}　Y ${Math.round(motionInfo.y)}　${Math.round(motionInfo.width)} × ${Math.round(motionInfo.height)}`
+                : `旋轉 ${motionInfo.rotation}°${motionInfo.rotation % 15 === 0 ? '　已吸附 15°' : ''}`}
             </div>
+          )}
+
+          {rotateHandle && bounds && (
+            <>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: rotateHandle.x,
+                  top: Math.min(rotateHandle.anchorY, rotateHandle.y),
+                  width: 1 / zoom,
+                  height: Math.abs(rotateHandle.y - rotateHandle.anchorY),
+                  background: 'var(--color-brand)',
+                  pointerEvents: 'none',
+                }}
+              />
+              <button
+                type="button"
+                aria-label={`旋轉${singleGroupName}`}
+                data-rotate-handle="group"
+                onPointerDown={(event) => onRotatePointerDown(event, selected, bounds)}
+                style={{
+                  position: 'absolute',
+                  left: rotateHandle.x - 7 / zoom,
+                  top: rotateHandle.y - 7 / zoom,
+                  width: 14 / zoom,
+                  height: 14 / zoom,
+                  padding: 0,
+                  borderRadius: '50%',
+                  border: `${2 / zoom}px solid var(--color-brand)`,
+                  background: '#fff',
+                  cursor: 'grab',
+                  pointerEvents: selected.some((el) => el.locked) ? 'none' : 'auto',
+                }}
+              />
+            </>
           )}
 
           {handles.map((h) => (
@@ -946,7 +1127,7 @@ export function Canvas() {
                 top: Math.max(8 / zoom, single.y - 50 / zoom),
                 transform: `scale(${1 / zoom})`,
                 transformOrigin: 'top left',
-                zIndex: 10000,
+                zIndex: LAYER.canvasOverlay,
               }}
             >
               <label className="flex items-center gap-1 px-1 text-[11px] text-ink-3">
@@ -1067,13 +1248,15 @@ export function Canvas() {
               aria-label="直接編輯文字"
               aria-multiline="true"
               data-placeholder="輸入文字"
-              onInput={(e) =>
+              onInput={(e) => {
+                const text = e.currentTarget.innerText.replace(/\r\n?/g, '\n');
+                const grown = growTextHeight(editing, e.currentTarget.scrollHeight, height);
                 editorStore.updateElement(
                   editing.id,
-                  { text: e.currentTarget.innerText.replace(/\r\n?/g, '\n') },
+                  grown === editing.height ? { text } : { text, height: grown },
                   { transient: true },
-                )
-              }
+                );
+              }}
               onBlur={() => {
                 editorStore.endTransaction();
                 editorStore.setEditingText(null);

@@ -1,7 +1,9 @@
+import { useRef, useState } from 'react';
 import { editorStore, useEditorState } from '../store/editorStore';
 import type { Slide } from '../model/types';
 import { ElementView, sortByZ } from './ElementView';
 import { Icon } from './Icon';
+import { LAYER } from '../lib/layers';
 
 const THUMB_WIDTH = 176;
 
@@ -42,6 +44,36 @@ function Thumbnail({ slide }: { slide: Slide }) {
 export function SlideList() {
   const state = useEditorState();
   const slides = state.presentation.slides;
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{
+    slideId: string;
+    position: 'before' | 'after';
+  } | null>(null);
+  const pointerDrag = useRef<{
+    slideId: string;
+    startX: number;
+    startY: number;
+    active: boolean;
+  } | null>(null);
+  const suppressClick = useRef(false);
+
+  const clearDrag = () => {
+    setDraggingId(null);
+    setDropTarget(null);
+  };
+
+  const findDropTarget = (clientX: number, clientY: number, sourceId: string) => {
+    const card = document
+      .elementsFromPoint(clientX, clientY)
+      .map((element) => element.closest<HTMLElement>('[data-slide-id]'))
+      .find((element) => element?.dataset.slideId && element.dataset.slideId !== sourceId);
+    if (!card?.dataset.slideId) return null;
+    const rect = card.getBoundingClientRect();
+    return {
+      slideId: card.dataset.slideId,
+      position: clientY < rect.top + rect.height / 2 ? ('before' as const) : ('after' as const),
+    };
+  };
 
   return (
     <aside
@@ -74,15 +106,85 @@ export function SlideList() {
           return (
             <div
               key={slide.id}
-              className="group rounded-lg p-1.5 transition"
+              className="group relative rounded-lg p-1.5 transition"
+              data-slide-id={slide.id}
+              aria-label={`投影片 ${index + 1}：${slide.title}，可拖曳調整順序`}
               style={{
                 background: active ? 'var(--color-brand-soft)' : 'transparent',
                 outline: active ? '1.5px solid var(--color-brand)' : '1px solid transparent',
+                cursor: draggingId === slide.id ? 'grabbing' : 'grab',
+                opacity: draggingId === slide.id ? 0.55 : 1,
+                userSelect: 'none',
               }}
-              onClick={() => editorStore.selectSlide(slide.id)}
+              onClick={() => {
+                if (suppressClick.current) return;
+                editorStore.selectSlide(slide.id);
+              }}
+              onPointerDown={(event) => {
+                if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
+                pointerDrag.current = {
+                  slideId: slide.id,
+                  startX: event.clientX,
+                  startY: event.clientY,
+                  active: false,
+                };
+                event.currentTarget.setPointerCapture?.(event.pointerId);
+              }}
+              onPointerMove={(event) => {
+                const current = pointerDrag.current;
+                if (!current) return;
+                if (!current.active) {
+                  const distance = Math.hypot(
+                    event.clientX - current.startX,
+                    event.clientY - current.startY,
+                  );
+                  if (distance < 6) return;
+                  current.active = true;
+                  setDraggingId(current.slideId);
+                }
+                setDropTarget(findDropTarget(event.clientX, event.clientY, current.slideId));
+              }}
+              onPointerUp={(event) => {
+                const current = pointerDrag.current;
+                pointerDrag.current = null;
+                const target = current
+                  ? findDropTarget(event.clientX, event.clientY, current.slideId) ?? dropTarget
+                  : null;
+                if (current?.active && target) {
+                  editorStore.moveSlideTo(current.slideId, target.slideId, target.position);
+                  suppressClick.current = true;
+                  setTimeout(() => {
+                    suppressClick.current = false;
+                  }, 0);
+                }
+                clearDrag();
+                event.currentTarget.releasePointerCapture?.(event.pointerId);
+              }}
+              onPointerCancel={() => {
+                pointerDrag.current = null;
+                clearDrag();
+              }}
             >
+              {dropTarget?.slideId === slide.id && draggingId !== slide.id && (
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    left: 2,
+                    right: 2,
+                    height: 3,
+                    borderRadius: 999,
+                    background: 'var(--color-brand)',
+                    zIndex: LAYER.slideDrag,
+                    ...(dropTarget.position === 'before' ? { top: -5 } : { bottom: -5 }),
+                  }}
+                />
+              )}
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-[11px] font-bold text-ink-2">{index + 1}</span>
+                <span className="flex items-center gap-1 text-[11px] font-bold text-ink-2">
+                  <span className="text-ink-3" aria-hidden="true">⋮⋮</span>
+                  {index + 1}
+                </span>
                 <div className="pointer-events-none flex items-center gap-0.5 opacity-0 transition group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
                   <button
                     type="button"
