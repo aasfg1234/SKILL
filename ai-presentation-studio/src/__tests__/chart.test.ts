@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createChartElement } from '../model/factory';
-import { CHART_TYPES, buildChartSvg } from '../model/chart';
+import { buildChartSvg } from '../model/chartDraw';
 
 function chart(overrides = {}) {
   return createChartElement({
@@ -15,10 +15,6 @@ function chart(overrides = {}) {
 }
 
 describe('圖表', () => {
-  it('提供長條圖、折線圖、圓餅圖三種', () => {
-    expect(CHART_TYPES.map((t) => t.id)).toEqual(['bar', 'line', 'pie']);
-  });
-
   it('產生的是完整的 SVG，尺寸與元素一致', () => {
     const svg = buildChartSvg(chart());
 

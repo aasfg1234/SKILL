@@ -100,25 +100,25 @@ describe('從試算表貼上資料', () => {
   it('看得懂用 Tab 分隔的兩欄', () => {
     expect(parsePastedSeries('一月\t100\n二月\t200')).toEqual({
       labels: ['一月', '二月'],
-      values: [100, 200],
+      series: [{ name: '', values: [100, 200] }],
     });
   });
 
   it('看得懂用逗號分隔的兩欄', () => {
     expect(parsePastedSeries('一月,100\n二月,200')).toEqual({
       labels: ['一月', '二月'],
-      values: [100, 200],
+      series: [{ name: '', values: [100, 200] }],
     });
   });
 
   it('數字裡的千分位逗號不會被誤判', () => {
-    expect(parsePastedSeries('一月\t1,200\n二月\t2,450')?.values).toEqual([1200, 2450]);
+    expect(parsePastedSeries('一月\t1,200\n二月\t2,450')?.series[0].values).toEqual([1200, 2450]);
   });
 
   it('第一列是標題時自動跳過', () => {
     expect(parsePastedSeries('月份\t營收\n一月\t100')).toEqual({
       labels: ['一月'],
-      values: [100],
+      series: [{ name: '營收', values: [100] }],
     });
   });
 
@@ -129,7 +129,7 @@ describe('從試算表貼上資料', () => {
   it('只有一欄時當成名稱，數值補零', () => {
     expect(parsePastedSeries('一月\n二月')).toEqual({
       labels: ['一月', '二月'],
-      values: [0, 0],
+      series: [{ name: '', values: [0, 0] }],
     });
   });
 

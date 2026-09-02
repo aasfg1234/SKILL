@@ -182,15 +182,25 @@ export interface AIComponentElement extends BaseElement {
   errorMessage?: string;
 }
 
-export type ChartType = 'bar' | 'line' | 'pie';
+export type ChartType = 'bar' | 'hbar' | 'line' | 'pie';
+
+/** 一組數列：一個名稱配一串數值，長度對應 labels。 */
+export interface ChartSeries {
+  name: string;
+  values: number[];
+}
 
 export interface ChartElement extends BaseElement {
   type: 'chart';
   chartType: ChartType;
-  /** 每一筆資料的名稱 */
+  /** 每一類的名稱 */
   labels: string[];
-  /** 對應的數值；長度不足會補零 */
-  values: number[];
+  /** 數列；可以有多組。讀取時請一律用 seriesOf() 以相容舊資料 */
+  series: ChartSeries[];
+  /** 舊版的單一數列；載入時會轉成 series，新程式不要再寫入 */
+  values?: number[];
+  /** 要不要顯示圖例 */
+  showLegend: boolean;
   /** 依序使用的顏色，用完會循環 */
   colors: string[];
   title: string;

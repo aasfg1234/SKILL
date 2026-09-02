@@ -11,6 +11,7 @@ import {
   type Presentation,
   type RectElement,
   type ChartElement,
+  type ChartSeries,
   type Slide,
   type SlideElement,
   type TableElement,
@@ -162,6 +163,11 @@ export function createTableElement(
   };
 }
 
+/** 沒指定 series 時的預設值；若呼叫端給了舊版的 values 就沿用。 */
+function defaultSeries(init: { values?: number[] }): ChartSeries[] {
+  return [{ name: '', values: init.values ?? [32, 48, 41, 60] }];
+}
+
 /**
  * 建立圖表。
  *
@@ -176,10 +182,11 @@ export function createChartElement(
     type: 'chart',
     chartType: init.chartType ?? 'bar',
     labels: init.labels ?? ['第一季', '第二季', '第三季', '第四季'],
-    values: init.values ?? [32, 48, 41, 60],
+    series: init.series ?? defaultSeries(init),
     colors: init.colors ?? [...DEFAULT_CHART_COLORS],
     title: init.title ?? '',
     showValues: init.showValues ?? true,
+    showLegend: init.showLegend ?? true,
     fontSize: init.fontSize ?? 28,
     color: init.color ?? '#111827',
     gridColor: init.gridColor ?? '#E5E7EB',

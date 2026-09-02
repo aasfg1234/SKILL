@@ -4,7 +4,7 @@ import type { AIComponentElement, SlideElement } from '../model/types';
 import { AI_KIND_LABELS, AI_STATUS_ICON, AI_STATUS_LABELS } from '../lib/labels';
 import { formatListLines, normalizeListStyle } from '../model/textList';
 import { isCoveredCell, mergeCovering } from '../model/table';
-import { buildChartSvg } from '../model/chart';
+import { buildChartSvg } from '../model/chartDraw';
 
 /**
  * 畫布 / 縮圖 / 播放模式共用的元素外觀。

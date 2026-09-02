@@ -21,7 +21,14 @@ import {
   removeTableRow,
 } from '../model/table';
 import { FONT_CHOICES, fontIdOfStack, fontStackOf } from '../lib/fonts';
-import { CHART_TYPES, parsePastedSeries } from '../model/chart';
+import {
+  CHART_TYPES,
+  insertSeriesRow,
+  moveSeriesRow,
+  parsePastedSeries,
+  seriesOf,
+  sortSeriesRows,
+} from '../model/chart';
 
 /** 右側屬性面板：位置、大小、樣式與 AI 設定。 */
 
@@ -599,20 +606,21 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
             />
           </Field>
 
-          <Field label="從 Excel／試算表貼上（兩欄：名稱、數值）">
+          <Field label="從 Excel／試算表貼上">
             <textarea
               className="field-input min-h-[64px] resize-y font-mono text-[11px]"
-              placeholder="從試算表選取兩欄，複製之後直接貼在這裡"
+              placeholder="第一欄是名稱，其餘每一欄各是一組數列。從試算表複製後直接貼在這裡"
               onPaste={(e) => {
-                const text = e.clipboardData.getData('text');
-                const parsed = parsePastedSeries(text);
+                const parsed = parsePastedSeries(e.clipboardData.getData('text'));
                 if (!parsed) return;
                 e.preventDefault();
-                update({ labels: parsed.labels, values: parsed.values });
+                update({ labels: parsed.labels, series: parsed.series, values: undefined });
                 e.currentTarget.value = '';
                 editorStore.toast({
                   tone: 'success',
                   title: `已帶入 ${parsed.labels.length} 筆資料`,
+                  detail:
+                    parsed.series.length > 1 ? `共 ${parsed.series.length} 組數列` : undefined,
                 });
               }}
               onChange={() => {}}
@@ -620,12 +628,105 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
           </Field>
 
           <div>
-            <span className="mb-1 block text-[11px] text-ink-3">資料</span>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[11px] text-ink-3">資料</span>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  className="tool-btn px-1.5 py-0.5 text-[10px]"
+                  title="依第一組數列由大到小排序"
+                  onClick={() => {
+                    const next = sortSeriesRows(el.labels, seriesOf(el), 'desc');
+                    update({ labels: next.labels, series: next.series, values: undefined });
+                  }}
+                >
+                  大到小
+                </button>
+                <button
+                  type="button"
+                  className="tool-btn px-1.5 py-0.5 text-[10px]"
+                  title="依第一組數列由小到大排序"
+                  onClick={() => {
+                    const next = sortSeriesRows(el.labels, seriesOf(el), 'asc');
+                    update({ labels: next.labels, series: next.series, values: undefined });
+                  }}
+                >
+                  小到大
+                </button>
+              </div>
+            </div>
+
+            {seriesOf(el).length > 1 && (
+              <div className="mb-1.5 space-y-1">
+                {seriesOf(el).map((s, si) => (
+                  <div key={si} className="flex items-center gap-1">
+                    <span
+                      className="h-4 w-4 shrink-0 rounded"
+                      style={{ background: el.colors[si % el.colors.length] }}
+                      aria-hidden="true"
+                    />
+                    <input
+                      className="field-input flex-1 text-[11px]"
+                      aria-label={`第 ${si + 1} 組數列的名稱`}
+                      placeholder={`數列 ${si + 1}`}
+                      value={s.name}
+                      onChange={(e) => {
+                        const series = seriesOf(el).map((item, k) =>
+                          k === si ? { ...item, name: e.target.value } : item,
+                        );
+                        update({ series, values: undefined });
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="tool-btn px-1.5"
+                      aria-label={`刪除第 ${si + 1} 組數列`}
+                      disabled={seriesOf(el).length <= 1}
+                      onClick={() =>
+                        update({
+                          series: seriesOf(el).filter((_, k) => k !== si),
+                          values: undefined,
+                        })
+                      }
+                    >
+                      <Icon name="trash" size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="space-y-1">
               {el.labels.map((label, i) => (
                 <div key={i} className="flex items-center gap-1">
+                  <div className="flex flex-col">
+                    <button
+                      type="button"
+                      className="tool-btn px-1 py-0"
+                      aria-label={`把第 ${i + 1} 筆往上移`}
+                      disabled={i === 0}
+                      onClick={() => {
+                        const next = moveSeriesRow(el.labels, seriesOf(el), i, -1);
+                        update({ labels: next.labels, series: next.series, values: undefined });
+                      }}
+                    >
+                      <Icon name="up" size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      className="tool-btn px-1 py-0"
+                      aria-label={`把第 ${i + 1} 筆往下移`}
+                      disabled={i === el.labels.length - 1}
+                      onClick={() => {
+                        const next = moveSeriesRow(el.labels, seriesOf(el), i, 1);
+                        update({ labels: next.labels, series: next.series, values: undefined });
+                      }}
+                    >
+                      <Icon name="down" size={11} />
+                    </button>
+                  </div>
                   <input
-                    className="field-input flex-1"
+                    className="field-input min-w-0 flex-1"
                     aria-label={`第 ${i + 1} 筆的名稱`}
                     value={label}
                     onChange={(e) => {
@@ -634,19 +735,41 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
                       update({ labels });
                     }}
                   />
-                  <input
-                    type="number"
-                    className="field-input w-[76px]"
-                    aria-label={`第 ${i + 1} 筆的數值`}
-                    value={Number.isFinite(el.values[i]) ? el.values[i] : 0}
-                    onChange={(e) => {
-                      const values = el.labels.map((_, k) =>
-                        Number.isFinite(el.values[k]) ? el.values[k] : 0,
-                      );
-                      values[i] = Number(e.target.value);
-                      update({ values });
+                  {seriesOf(el).map((s, si) => (
+                    <input
+                      key={si}
+                      type="number"
+                      className="field-input w-[64px]"
+                      aria-label={
+                        seriesOf(el).length > 1
+                          ? `第 ${i + 1} 筆在第 ${si + 1} 組的數值`
+                          : `第 ${i + 1} 筆的數值`
+                      }
+                      value={Number.isFinite(s.values[i]) ? s.values[i] : 0}
+                      onChange={(e) => {
+                        const series = seriesOf(el).map((item, k) => {
+                          const values = el.labels.map((_, n) =>
+                            Number.isFinite(item.values[n]) ? item.values[n] : 0,
+                          );
+                          if (k === si) values[i] = Number(e.target.value);
+                          return { ...item, values };
+                        });
+                        update({ series, values: undefined });
+                      }}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    className="tool-btn px-1.5"
+                    aria-label={`在第 ${i + 1} 筆後面插入一列`}
+                    title="在下面插入一列"
+                    onClick={() => {
+                      const next = insertSeriesRow(el.labels, seriesOf(el), i + 1);
+                      update({ labels: next.labels, series: next.series, values: undefined });
                     }}
-                  />
+                  >
+                    ＋
+                  </button>
                   <button
                     type="button"
                     className="tool-btn px-1.5"
@@ -655,9 +778,13 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
                     onClick={() =>
                       update({
                         labels: el.labels.filter((_, k) => k !== i),
-                        values: el.labels
-                          .map((_, k) => (Number.isFinite(el.values[k]) ? el.values[k] : 0))
-                          .filter((_, k) => k !== i),
+                        series: seriesOf(el).map((s) => ({
+                          ...s,
+                          values: el.labels
+                            .map((_, n) => (Number.isFinite(s.values[n]) ? s.values[n] : 0))
+                            .filter((_, n) => n !== i),
+                        })),
+                        values: undefined,
                       })
                     }
                   >
@@ -666,21 +793,39 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
                 </div>
               ))}
             </div>
-            <button
-              type="button"
-              className="tool-btn mt-1.5 w-full justify-center"
-              onClick={() =>
-                update({
-                  labels: [...el.labels, `項目 ${el.labels.length + 1}`],
-                  values: [
-                    ...el.labels.map((_, k) => (Number.isFinite(el.values[k]) ? el.values[k] : 0)),
-                    0,
-                  ],
-                })
-              }
-            >
-              ＋ 新增一筆
-            </button>
+
+            <div className="mt-1.5 flex gap-1.5">
+              <button
+                type="button"
+                className="tool-btn flex-1 justify-center"
+                onClick={() => {
+                  const next = insertSeriesRow(el.labels, seriesOf(el), el.labels.length);
+                  next.labels[next.labels.length - 1] = `項目 ${next.labels.length}`;
+                  update({ labels: next.labels, series: next.series, values: undefined });
+                }}
+              >
+                ＋ 新增一筆
+              </button>
+              <button
+                type="button"
+                className="tool-btn flex-1 justify-center"
+                title="同一張圖再放一組資料（圓餅圖只看第一組）"
+                onClick={() =>
+                  update({
+                    series: [
+                      ...seriesOf(el),
+                      {
+                        name: `數列 ${seriesOf(el).length + 1}`,
+                        values: el.labels.map(() => 0),
+                      },
+                    ],
+                    values: undefined,
+                  })
+                }
+              >
+                ＋ 新增數列
+              </button>
+            </div>
           </div>
 
           <div className="flex gap-1">
@@ -690,6 +835,13 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
               title="在圖上標出數值"
             >
               <span className="text-[11px]">顯示數值</span>
+            </ToggleButton>
+            <ToggleButton
+              active={el.showLegend}
+              onClick={() => update({ showLegend: !el.showLegend })}
+              title="顯示圖例"
+            >
+              <span className="text-[11px]">顯示圖例</span>
             </ToggleButton>
           </div>
 
@@ -731,7 +883,7 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
             </div>
           </div>
           <p className="text-[11px] leading-snug text-ink-3">
-            這一版只支援單一數列。要在同一張圖放兩三條線，請改用 AI 元件。
+            圓餅圖只會用第一組數列。橫向長條圖適合項目名稱較長的情況。
           </p>
         </Section>
       )}

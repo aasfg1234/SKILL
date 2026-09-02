@@ -2,7 +2,7 @@ import { escapeHtml, sanitizeAiOutput, sanitizeImageSrc } from '../model/sanitiz
 import type { AIComponentElement, SlideElement } from '../model/types';
 import { formatListLines, normalizeListStyle } from '../model/textList';
 import { isCoveredCell, mergeCovering } from '../model/table';
-import { buildChartSvg } from '../model/chart';
+import { buildChartSvg } from '../model/chartDraw';
 
 /**
  * 元素 → HTML 片段。
