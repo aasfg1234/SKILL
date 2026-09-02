@@ -195,7 +195,7 @@ function navigationScript(total: number): string {
       '<div class="title" id="p-title"></div></div><div class="timer" id="p-timer">00:00</div></div>' +
       '<div class="notes" id="p-notes"></div>' +
       '<div class="next" id="p-next"></div>' +
-      '<div class="tip">把這個視窗留在自己的螢幕，簡報視窗放到投影機並按 F 全螢幕。換頁請在簡報視窗操作。</div>' +
+      '<div class="tip">把這個視窗留在自己的螢幕，簡報視窗放到投影機並按 F 全螢幕。兩個視窗都可以用方向鍵換頁。</div>' +
       '</div></body></html>'
     );
     doc.close();
@@ -238,6 +238,8 @@ function navigationScript(total: number): string {
     try { presenterWin = window.open('', 'aps-presenter', 'width=980,height=720'); } catch (err) { presenterWin = null; }
     if (presenterWin && presenterWin.document) {
       writeShell(presenterWin.document);
+      // 講者視窗被點到時焦點會跑過去，方向鍵要能繼續換頁。
+      try { presenterWin.document.addEventListener('keydown', handleKey); } catch (err) {}
       if (inline) inline.hidden = true;
     } else {
       // 被瀏覽器擋掉時，退回顯示在同一個畫面上的面板
@@ -279,7 +281,7 @@ function navigationScript(total: number): string {
     else if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen(); }
   }
 
-  document.addEventListener('keydown', function(e){
+  function handleKey(e){
     switch (e.key) {
       case 'ArrowRight': case 'PageDown': go(index + 1); e.preventDefault(); break;
       case ' ': case 'Spacebar': go(index + 1); e.preventDefault(); break;
@@ -294,7 +296,9 @@ function navigationScript(total: number): string {
         break;
       default: break;
     }
-  });
+  }
+
+  document.addEventListener('keydown', handleKey);
 
   var prev = document.getElementById('aps-prev');
   var next = document.getElementById('aps-next');
