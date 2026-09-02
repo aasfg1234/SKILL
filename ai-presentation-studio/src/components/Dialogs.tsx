@@ -6,6 +6,7 @@ import type { MergeSummary } from '../model/patch';
 import { copyToClipboard } from '../lib/files';
 import { exportValidationReport } from '../actions';
 import { Icon } from './Icon';
+import { SLIDE_LAYOUTS } from '../model/layouts';
 
 function Modal({
   title,
@@ -410,6 +411,87 @@ function ConfirmDialog({
   );
 }
 
+/** 版型縮圖：用幾個灰色方塊示意排版，不需要真的算出內容。 */
+function LayoutPreview({ id }: { id: string }) {
+  const bar = (style: React.CSSProperties, key: string) => (
+    <div key={key} style={{ position: 'absolute', borderRadius: 2, ...style }} />
+  );
+  const ink = 'var(--color-ink-3)';
+  const soft = 'var(--color-panel-2)';
+  const brand = 'var(--color-brand)';
+
+  const shapes: Record<string, React.ReactNode[]> = {
+    blank: [],
+    title: [
+      bar({ left: '12%', top: '38%', width: '64%', height: '14%', background: ink }, 'a'),
+      bar({ left: '12%', top: '58%', width: '14%', height: '5%', background: brand }, 'b'),
+      bar({ left: '12%', top: '68%', width: '42%', height: '8%', background: soft }, 'c'),
+    ],
+    'title-content': [
+      bar({ left: '8%', top: '12%', width: '56%', height: '11%', background: ink }, 'a'),
+      bar({ left: '8%', top: '28%', width: '9%', height: '4%', background: brand }, 'b'),
+      bar({ left: '8%', top: '40%', width: '84%', height: '44%', background: soft }, 'c'),
+    ],
+    'two-column': [
+      bar({ left: '8%', top: '12%', width: '56%', height: '11%', background: ink }, 'a'),
+      bar({ left: '8%', top: '28%', width: '9%', height: '4%', background: brand }, 'b'),
+      bar({ left: '8%', top: '40%', width: '40%', height: '44%', background: soft }, 'c'),
+      bar({ left: '52%', top: '40%', width: '40%', height: '44%', background: soft }, 'd'),
+    ],
+    'image-text': [
+      bar({ left: '8%', top: '12%', width: '56%', height: '11%', background: ink }, 'a'),
+      bar({ left: '8%', top: '28%', width: '9%', height: '4%', background: brand }, 'b'),
+      bar(
+        { left: '8%', top: '40%', width: '44%', height: '44%', background: ink, opacity: 0.35 },
+        'c',
+      ),
+      bar({ left: '56%', top: '40%', width: '36%', height: '44%', background: soft }, 'd'),
+    ],
+  };
+
+  return (
+    <div
+      className="relative w-full overflow-hidden rounded-md border"
+      style={{
+        aspectRatio: '16 / 9',
+        background: 'var(--color-panel)',
+        borderColor: 'var(--color-line)',
+      }}
+    >
+      {shapes[id] ?? []}
+    </div>
+  );
+}
+
+function LayoutDialog({ afterSlideId }: { afterSlideId?: string }) {
+  return (
+    <Modal title="選擇版型" subtitle="挑一個起點，之後隨時可以改" width={720}>
+      <div className="grid grid-cols-3 gap-3">
+        {SLIDE_LAYOUTS.map((layout) => (
+          <button
+            key={layout.id}
+            type="button"
+            className="panel-card flex flex-col gap-2 p-2.5 text-left transition hover:bg-panel-2"
+            onClick={() => {
+              editorStore.closeDialog();
+              editorStore.addSlide(afterSlideId, layout.id);
+              editorStore.toast({ tone: 'success', title: `已新增「${layout.name}」投影片` });
+            }}
+          >
+            <LayoutPreview id={layout.id} />
+            <div>
+              <div className="text-[12.5px] font-bold">{layout.name}</div>
+              <div className="mt-0.5 text-[11px] leading-snug text-ink-3">
+                {layout.description}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
 export function Dialogs() {
   const state = useEditorState();
   const dialog = state.dialog;
@@ -426,6 +508,8 @@ export function Dialogs() {
       return <SettingsDialog />;
     case 'help':
       return <HelpDialog />;
+    case 'layout':
+      return <LayoutDialog afterSlideId={dialog.afterSlideId} />;
     case 'confirm':
       return (
         <ConfirmDialog

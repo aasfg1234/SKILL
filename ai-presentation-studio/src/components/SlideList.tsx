@@ -90,7 +90,9 @@ export function SlideList() {
           type="button"
           className="tool-btn px-1.5"
           title="新增投影片"
-          onClick={() => editorStore.addSlide(state.currentSlideId)}
+          onClick={() =>
+            editorStore.openDialog({ kind: 'layout', afterSlideId: state.currentSlideId })
+          }
         >
           <Icon name="plus" size={15} />
         </button>
@@ -271,7 +273,9 @@ export function SlideList() {
           type="button"
           className="tool-btn w-full justify-center"
           style={{ background: 'var(--color-panel-2)', border: '1px solid var(--color-line)' }}
-          onClick={() => editorStore.addSlide(state.currentSlideId)}
+          onClick={() =>
+            editorStore.openDialog({ kind: 'layout', afterSlideId: state.currentSlideId })
+          }
         >
           <Icon name="plus" size={14} />
           新增投影片

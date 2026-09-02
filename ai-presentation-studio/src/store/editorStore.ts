@@ -8,6 +8,7 @@ import {
   topZ,
 } from '../model/factory';
 import { createDemoPresentation } from '../model/demo';
+import { buildLayoutElements } from '../model/layouts';
 import { newGroupId, nextTaskId } from '../model/ids';
 import { applyPatch, mergeCompletedPresentation, type MergeSummary } from '../model/patch';
 import type {
@@ -48,6 +49,7 @@ export type DialogState =
   | { kind: 'ai-prompt'; text: string }
   | { kind: 'settings' }
   | { kind: 'help' }
+  | { kind: 'layout'; afterSlideId?: string }
   | {
       kind: 'confirm';
       title: string;
@@ -377,12 +379,20 @@ class EditorStore {
     this.set({ currentSlideId: slideId, selectedIds: [], editingTextId: null });
   }
 
-  addSlide(afterSlideId?: string): void {
+  addSlide(afterSlideId?: string, layoutId?: string): void {
     // 用插入後的頁次命名，不要用總張數。插在第 3 張卻叫「投影片 6」很難懂。
     const index = afterSlideId
       ? this.state.presentation.slides.findIndex((s) => s.id === afterSlideId) + 1
       : this.state.presentation.slides.length;
-    const slide = createSlide({ title: `投影片 ${index + 1}` });
+    const { width, height } = this.state.presentation.settings;
+    const elements = layoutId
+      ? buildLayoutElements(layoutId, {
+          width,
+          height,
+          accent: this.state.presentation.theme.palette.primary,
+        })
+      : [];
+    const slide = createSlide({ title: `投影片 ${index + 1}`, elements });
     this.commit((draft) => {
       draft.slides.splice(index, 0, slide);
     });

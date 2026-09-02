@@ -432,4 +432,18 @@ describe('編輯器 Store', () => {
     const toast = editorStore.getState().toasts.find((item) => item.title.includes('已刪除投影片'));
     expect(toast?.detail).toContain('Ctrl+Z');
   });
+
+  it('新增投影片可以指定版型', () => {
+    editorStore.addSlide('slide-01', 'title-content');
+
+    const slide = editorStore.getState().presentation.slides[1];
+    expect(slide.elements.length).toBeGreaterThan(0);
+    expect(slide.elements.some((el) => el.type === 'text')).toBe(true);
+  });
+
+  it('沒有指定版型時新增空白投影片', () => {
+    editorStore.addSlide('slide-01');
+
+    expect(editorStore.getState().presentation.slides[1].elements).toEqual([]);
+  });
 });

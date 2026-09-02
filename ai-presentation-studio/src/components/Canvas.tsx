@@ -11,6 +11,12 @@ import {
 import type { SlideElement, TextElement } from '../model/types';
 import { editorStore, useEditorState, type ToolId } from '../store/editorStore';
 import { pickImageFile } from '../lib/files';
+import {
+  fitImageIntoSlide,
+  measureImage,
+  pickImageFromFiles,
+  readImageAsDataUrl,
+} from '../lib/images';
 import { suggestedFormat } from '../lib/labels';
 import { ElementView, sortByZ } from './ElementView';
 import { LAYER } from '../lib/layers';
@@ -294,6 +300,7 @@ export function Canvas() {
   const [motionInfo, setMotionInfo] = useState<(Rect & { rotation?: number }) | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const spaceHeld = useRef(false);
+  const [dropping, setDropping] = useState(false);
 
   const zoom = state.zoom;
 
@@ -535,6 +542,70 @@ export function Canvas() {
       wrap.removeEventListener('pointercancel', onUp);
     };
   }, []);
+
+  /** 把一個圖片檔放進目前這張投影片。point 是投影片座標，沒給就放正中間。 */
+  const insertImageFile = useCallback(
+    async (file: File, point?: { x: number; y: number }) => {
+      const dataUrl = await readImageAsDataUrl(file);
+      if (!dataUrl) {
+        editorStore.toast({ tone: 'error', title: '讀不到這個圖片檔' });
+        return;
+      }
+      const size = fitImageIntoSlide(await measureImage(dataUrl), { width, height });
+      const placed = fitRectToCanvas(
+        point
+          ? { x: point.x - size.width / 2, y: point.y - size.height / 2, ...size }
+          : { x: (width - size.width) / 2, y: (height - size.height) / 2, ...size },
+        width,
+        height,
+      );
+      editorStore.addElement(
+        createImageElement({ ...placed, src: dataUrl, alt: file.name, fit: 'contain' }),
+      );
+      editorStore.toast({ tone: 'success', title: '已插入圖片', detail: file.name });
+    },
+    [width, height],
+  );
+
+  // 從系統剪貼簿貼上圖片（截圖後直接 Ctrl+V）。
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      if (editorStore.getState().editingTextId) return;
+      const file = pickImageFromFiles(e.clipboardData?.files ?? null);
+      if (!file) return;
+      e.preventDefault();
+      void insertImageFile(file);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [insertImageFile]);
+
+  const onDragOver = (e: React.DragEvent) => {
+    if (!Array.from(e.dataTransfer.types ?? []).includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDropping(true);
+  };
+
+  const onDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDropping(false);
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    const file = pickImageFromFiles(e.dataTransfer.files);
+    if (!file) {
+      if (Array.from(e.dataTransfer.types ?? []).includes('Files')) {
+        e.preventDefault();
+        setDropping(false);
+        editorStore.toast({ tone: 'warning', title: '只能拖曳圖片檔進來' });
+      }
+      return;
+    }
+    e.preventDefault();
+    setDropping(false);
+    void insertImageFile(file, toStage(e.clientX, e.clientY));
+  };
 
   const openContextMenu = (e: React.MouseEvent, element?: SlideElement) => {
     e.preventDefault();
@@ -1039,6 +1110,9 @@ export function Canvas() {
       ref={wrapRef}
       className="relative h-full w-full overflow-auto"
       style={{ background: 'var(--color-stage)' }}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
     >
       <div className="flex min-h-full min-w-full items-center justify-center p-9">
         <div
@@ -1478,6 +1552,20 @@ export function Canvas() {
           )}
         </div>
       </div>
+
+      {dropping && (
+        <div
+          className="pointer-events-none fixed inset-0 flex items-center justify-center"
+          style={{ zIndex: LAYER.canvasMotion, background: 'rgba(79,70,229,.08)' }}
+        >
+          <div
+            className="panel-card px-4 py-2 text-[13px] font-bold shadow-xl"
+            style={{ border: '2px dashed var(--color-brand)' }}
+          >
+            放開就把圖片放進這張投影片
+          </div>
+        </div>
+      )}
 
       {menu && (
         <div
