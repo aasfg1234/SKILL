@@ -10,6 +10,8 @@ import { SLIDE_LAYOUTS } from '../model/layouts';
 import { findInPresentation } from '../model/search';
 import { FONT_CHOICES, fontIdOfStack, fontStackOf } from '../lib/fonts';
 import { libraryUsageBytes } from '../lib/library';
+import { PRESET_SIZES, aspectRatioLabel } from '../model/presenting';
+import { createDarkTheme, createDefaultTheme } from '../model/factory';
 
 function Modal({
   title,
@@ -299,6 +301,101 @@ function SettingsDialog() {
             />
           </label>
         </div>
+        <div>
+          <span className="mb-1 block text-[11px] text-ink-3">
+            投影片比例（目前：{aspectRatioLabel(settings.width, settings.height)}）
+          </span>
+          <div className="flex gap-1.5">
+            {PRESET_SIZES.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                className="tool-btn flex-1 justify-center"
+                data-active={
+                  settings.width === preset.width && settings.height === preset.height
+                }
+                onClick={() =>
+                  editorStore.updateSettings({
+                    width: preset.width,
+                    height: preset.height,
+                    aspectRatio: preset.id,
+                  })
+                }
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          <span className="mt-1 block text-[11px] leading-snug text-ink-3">
+            切換比例只會改畫布大小，已放好的元素不會自動重排，可能需要手動調整。
+          </span>
+        </div>
+
+        <label className="flex items-start gap-2 text-[12px] text-ink-2">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={settings.hideIncompleteAi === true}
+            onChange={(e) => editorStore.updateSettings({ hideIncompleteAi: e.target.checked })}
+          />
+          <span>
+            播放與匯出時隱藏未完成的 AI 元件
+            <span className="mt-0.5 block text-[11px] leading-snug text-ink-3">
+              勾起來之後，還沒交回結果的 AI 元件不會出現，觀眾就不會看到「等待 AI 處理」與任務編號。
+            </span>
+          </span>
+        </label>
+
+        <div>
+          <span className="mb-1 block text-[11px] text-ink-3">主題顏色</span>
+          <div className="mb-2 flex gap-1.5">
+            <button
+              type="button"
+              className="tool-btn flex-1 justify-center"
+              onClick={() => editorStore.applyThemePreset(createDefaultTheme())}
+            >
+              淺色
+            </button>
+            <button
+              type="button"
+              className="tool-btn flex-1 justify-center"
+              onClick={() => editorStore.applyThemePreset(createDarkTheme())}
+            >
+              深色
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            {(
+              [
+                ['primary', '主色'],
+                ['accent', '輔色'],
+                ['text', '文字'],
+                ['muted', '次要文字'],
+                ['background', '底色'],
+                ['surface', '區塊底色'],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 text-[11px] text-ink-3">
+                <input
+                  type="color"
+                  className="h-7 w-8 cursor-pointer rounded-md border"
+                  style={{ borderColor: 'var(--color-line)', background: 'transparent' }}
+                  value={
+                    /^#[0-9a-f]{6}$/i.test(state.presentation.theme.palette[key])
+                      ? state.presentation.theme.palette[key]
+                      : '#000000'
+                  }
+                  onChange={(e) => editorStore.setThemeColor(key, e.target.value)}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          <span className="mt-1 block text-[11px] leading-snug text-ink-3">
+            主題顏色主要影響匯出的 HTML 與 AI 佔位框。每一頁的背景色仍由該頁自己設定。
+          </span>
+        </div>
+
         <label className="block">
           <span className="mb-1 block text-[11px] text-ink-3">整份簡報的預設字型</span>
           <select
@@ -642,12 +739,12 @@ function FindDialog() {
   return (
     <Modal
       title="搜尋與取代"
-      subtitle="找的是文字元素與表格的內容"
+      subtitle="找投影片標題、備註、文字與表格內容"
       width={560}
       footer={
         <>
           <span className="mr-auto text-[11.5px] text-ink-3">
-            {query.trim() === '' ? '輸入要找的文字' : `找到 ${total} 處，分布在 ${hits.length} 個元素`}
+            {query.trim() === '' ? '輸入要找的文字' : `找到 ${total} 處，分布在 ${hits.length} 個位置`}
           </span>
           <button type="button" className="tool-btn" onClick={() => editorStore.closeDialog()}>
             關閉
@@ -700,7 +797,7 @@ function FindDialog() {
           <div className="max-h-[240px] space-y-1 overflow-y-auto pt-1">
             {hits.map((hit) => (
               <button
-                key={`${hit.slideId}-${hit.elementId}`}
+                key={`${hit.slideId}-${hit.field}-${hit.elementId ?? ''}`}
                 type="button"
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition hover:bg-panel-2"
                 onClick={() => {
@@ -710,6 +807,9 @@ function FindDialog() {
               >
                 <span className="shrink-0 font-mono text-[11px] text-ink-3">
                   第 {hit.slideIndex + 1} 頁
+                </span>
+                <span className="shrink-0 text-[10.5px] text-ink-3">
+                  {hit.field === 'title' ? '標題' : hit.field === 'notes' ? '備註' : '內容'}
                 </span>
                 <span className="flex-1 truncate text-[12px]">{hit.preview}</span>
                 <span className="shrink-0 text-[11px] text-ink-3">{hit.count} 處</span>

@@ -70,6 +70,21 @@ export function BottomToolbar() {
         </button>
       ))}
 
+      <button
+        type="button"
+        className="tool-btn px-1.5"
+        data-active={state.toolLocked}
+        title={
+          state.toolLocked
+            ? '目前會連續使用同一個工具，點一下改回畫完就跳回選取'
+            : '鎖定工具：畫完之後留在同一個工具，可以連續畫'
+        }
+        aria-pressed={state.toolLocked}
+        onClick={() => editorStore.setToolLocked(!state.toolLocked)}
+      >
+        <Icon name={state.toolLocked ? 'lock' : 'unlock'} size={15} />
+      </button>
+
       <div className="mx-1 h-6 w-px" style={{ background: 'var(--color-line)' }} />
 
       <button

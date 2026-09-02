@@ -3,25 +3,34 @@ import type { Presentation } from './types';
 /**
  * 全簡報的文字搜尋與取代。
  *
- * 搜尋範圍：文字元素的內容，以及表格的每一個儲存格。
- * 不會動到投影片標題、備註與 AI 元件的 Prompt，避免改壞設定。
+ * 搜尋範圍：投影片標題、投影片備註、文字元素的內容，以及表格的每一個儲存格。
+ * 不會動到 AI 元件的 Prompt，避免把交給外部 AI 的指示改壞。
  */
 
 export interface SearchOptions {
   caseSensitive?: boolean;
 }
 
+/** 命中的位置：投影片標題、投影片備註，或某一個元素。 */
+export type SearchField = 'title' | 'notes' | 'element';
+
 export interface SearchHit {
   slideId: string;
   slideIndex: number;
-  elementId: string;
-  /** 這個元素裡出現幾次 */
+  field: SearchField;
+  /** 標題與備註沒有對應的元素，所以是 null */
+  elementId: string | null;
+  /** 這個位置裡出現幾次 */
   count: number;
   /** 給使用者看的一小段內容 */
   preview: string;
 }
 
-function countOccurrences(haystack: string, needle: string, caseSensitive: boolean): number {
+function countOccurrences(
+  haystack: string,
+  needle: string,
+  caseSensitive: boolean,
+): number {
   if (!needle) return 0;
   const source = caseSensitive ? haystack : haystack.toLowerCase();
   const target = caseSensitive ? needle : needle.toLowerCase();
@@ -73,6 +82,30 @@ export function findInPresentation(
   const hits: SearchHit[] = [];
 
   presentation.slides.forEach((slide, slideIndex) => {
+    const titleCount = countOccurrences(slide.title, needle, caseSensitive);
+    if (titleCount > 0) {
+      hits.push({
+        slideId: slide.id,
+        slideIndex,
+        field: 'title',
+        elementId: null,
+        count: titleCount,
+        preview: preview(slide.title),
+      });
+    }
+
+    const notesCount = countOccurrences(slide.notes, needle, caseSensitive);
+    if (notesCount > 0) {
+      hits.push({
+        slideId: slide.id,
+        slideIndex,
+        field: 'notes',
+        elementId: null,
+        count: notesCount,
+        preview: preview(slide.notes),
+      });
+    }
+
     for (const el of slide.elements) {
       if (el.type === 'text') {
         const count = countOccurrences(el.text, needle, caseSensitive);
@@ -80,6 +113,7 @@ export function findInPresentation(
           hits.push({
             slideId: slide.id,
             slideIndex,
+            field: 'element',
             elementId: el.id,
             count,
             preview: preview(el.text),
@@ -95,9 +129,12 @@ export function findInPresentation(
           hits.push({
             slideId: slide.id,
             slideIndex,
+            field: 'element',
             elementId: el.id,
             count,
-            preview: preview(flat.filter((cell) => cell.trim() !== '').join('｜')),
+            preview: preview(
+              flat.filter((cell) => cell.trim() !== '').join('｜'),
+            ),
           });
         }
       }
@@ -122,32 +159,57 @@ export function replaceInPresentation(
 
   const next: Presentation = {
     ...presentation,
-    slides: presentation.slides.map((slide) => ({
-      ...slide,
-      elements: slide.elements.map((el) => {
-        if (el.type === 'text') {
-          const count = countOccurrences(el.text, needle, caseSensitive);
-          if (count === 0) return el;
-          replaced += count;
-          return { ...el, text: replaceAllText(el.text, needle, value, caseSensitive) };
-        }
-        if (el.type === 'table') {
-          const count = el.cells
-            .flat()
-            .reduce((sum, cell) => sum + countOccurrences(cell, needle, caseSensitive), 0);
-          if (count === 0) return el;
-          replaced += count;
-          return {
-            ...el,
-            cells: el.cells.map((line) =>
-              line.map((cell) => replaceAllText(cell, needle, value, caseSensitive)),
-            ),
-          };
-        }
-        return el;
-      }),
-    })),
+    slides: presentation.slides.map((slide) => {
+      const titleCount = countOccurrences(slide.title, needle, caseSensitive);
+      const notesCount = countOccurrences(slide.notes, needle, caseSensitive);
+      replaced += titleCount + notesCount;
+
+      return {
+        ...slide,
+        title:
+          titleCount > 0
+            ? replaceAllText(slide.title, needle, value, caseSensitive)
+            : slide.title,
+        notes:
+          notesCount > 0
+            ? replaceAllText(slide.notes, needle, value, caseSensitive)
+            : slide.notes,
+        elements: slide.elements.map((el) => {
+          if (el.type === 'text') {
+            const count = countOccurrences(el.text, needle, caseSensitive);
+            if (count === 0) return el;
+            replaced += count;
+            return {
+              ...el,
+              text: replaceAllText(el.text, needle, value, caseSensitive),
+            };
+          }
+          if (el.type === 'table') {
+            const count = el.cells
+              .flat()
+              .reduce(
+                (sum, cell) =>
+                  sum + countOccurrences(cell, needle, caseSensitive),
+                0,
+              );
+            if (count === 0) return el;
+            replaced += count;
+            return {
+              ...el,
+              cells: el.cells.map((line) =>
+                line.map((cell) =>
+                  replaceAllText(cell, needle, value, caseSensitive),
+                ),
+              ),
+            };
+          }
+          return el;
+        }),
+      };
+    }),
   };
 
-  return replaced > 0 ? { presentation: next, replaced } : { presentation, replaced: 0 };
+  return replaced > 0
+    ? { presentation: next, replaced }
+    : { presentation, replaced: 0 };
 }

@@ -226,8 +226,9 @@ export interface AITask {
 export interface PresentationSettings {
   width: number;
   height: number;
-  /** 預留：未來可支援 4:3 等 */
   aspectRatio: string;
+  /** 播放與匯出時，隱藏還沒交回結果的 AI 元件，避免觀眾看到佔位框 */
+  hideIncompleteAi?: boolean;
 }
 
 export interface Presentation {

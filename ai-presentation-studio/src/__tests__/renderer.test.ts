@@ -84,6 +84,19 @@ describe('HTML Renderer', () => {
     }
   });
 
+  it('開啟隱藏設定後，未完成的 AI 元件不會出現在匯出的簡報裡', () => {
+    const hidden = createDemoPresentation();
+    hidden.settings.hideIncompleteAi = true;
+    const out = renderPresentationToHtml(hidden);
+
+    expect(out).not.toContain('等待 AI 處理');
+    expect(out).not.toContain('aps-ai-pending');
+    // 一般元素不受影響
+    expect(out).toContain('2026 AI 科技趨勢');
+    // 備註仍會匯出，講者檢視才有東西可看（觀眾看不到）
+    expect(out).toContain('data-notes=');
+  });
+
   it('匯出的 HTML 內建講者檢視', () => {
     expect(html).toContain('aps-presenter');
     expect(html).toContain('講者檢視');

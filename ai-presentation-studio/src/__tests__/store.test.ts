@@ -478,4 +478,31 @@ describe('編輯器 Store', () => {
       editorStore.getState().presentation.slides[1].elements.map((el) => el.id),
     ).toContain('later');
   });
+
+  it('新增元素後預設跳回選取工具', () => {
+    editorStore.setTool('rect');
+    editorStore.addElement(createRectElement({ id: 'one' }), 'slide-01');
+
+    expect(editorStore.getState().tool).toBe('select');
+  });
+
+  it('鎖定工具後可以連續新增，工具不會跳回選取', () => {
+    editorStore.setToolLocked(true);
+    editorStore.setTool('rect');
+    editorStore.addElement(createRectElement({ id: 'one' }), 'slide-01');
+
+    expect(editorStore.getState().tool).toBe('rect');
+
+    editorStore.setToolLocked(false);
+    editorStore.addElement(createRectElement({ id: 'two' }), 'slide-01');
+    expect(editorStore.getState().tool).toBe('select');
+  });
+
+  it('可以改主題顏色，而且能復原', () => {
+    editorStore.setThemeColor('primary', '#FF0000');
+
+    expect(editorStore.getState().presentation.theme.palette.primary).toBe('#FF0000');
+    editorStore.undo();
+    expect(editorStore.getState().presentation.theme.palette.primary).not.toBe('#FF0000');
+  });
 });

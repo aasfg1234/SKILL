@@ -81,6 +81,8 @@ export interface EditorState {
   selectedSlideIds: string[];
   selectedIds: string[];
   tool: ToolId;
+  /** 鎖定工具：連續新增同一種元素，不會自動跳回選取 */
+  toolLocked: boolean;
   zoom: number;
   fitToWindow: boolean;
   snapEnabled: boolean;
@@ -134,6 +136,7 @@ function initialState(): EditorState {
     selectedSlideIds: [currentSlideId],
     selectedIds: [],
     tool: 'select',
+    toolLocked: false,
     zoom: 0.4,
     fitToWindow: true,
     snapEnabled: true,
@@ -325,6 +328,10 @@ class EditorStore {
     this.set({ tool });
   }
 
+  setToolLocked(locked: boolean): void {
+    this.set({ toolLocked: locked });
+  }
+
   setZoom(zoom: number): void {
     this.set({ zoom: Math.min(3, Math.max(0.05, zoom)), fitToWindow: false });
   }
@@ -495,9 +502,9 @@ class EditorStore {
   }
 
   /** 跳到搜尋結果所在的位置並選取該元素。 */
-  gotoHit(slideId: string, elementId: string): void {
+  gotoHit(slideId: string, elementId: string | null): void {
     this.selectSlide(slideId);
-    this.set({ selectedIds: [elementId] });
+    if (elementId) this.set({ selectedIds: [elementId] });
   }
 
   addSlide(afterSlideId?: string, layoutId?: string): void {
@@ -742,7 +749,11 @@ class EditorStore {
         z: element.z || topZ(draft.slides[index]),
       });
     });
-    this.set({ selectedIds: [element.id], tool: 'select' });
+    // 鎖定工具時留在原本的工具，方便連續畫多個元素。
+    this.set({
+      selectedIds: [element.id],
+      ...(this.state.toolLocked ? {} : { tool: 'select' as ToolId }),
+    });
   }
 
   updateElement(
@@ -1111,6 +1122,24 @@ class EditorStore {
   updateMetadata(props: Partial<Presentation['metadata']>): void {
     this.commit((draft) => {
       Object.assign(draft.metadata, props);
+    });
+  }
+
+  /** 改主題的單一顏色。會進入復原歷史。 */
+  setThemeColor(key: keyof Presentation['theme']['palette'], value: string): void {
+    this.commit((draft) => {
+      draft.theme = { ...draft.theme, palette: { ...draft.theme.palette, [key]: value } };
+    });
+  }
+
+  /** 換成內建主題（淺色／深色），字型維持目前的設定。 */
+  applyThemePreset(theme: Presentation['theme']): void {
+    this.commit((draft) => {
+      draft.theme = {
+        ...theme,
+        fontFamily: draft.theme.fontFamily,
+        headingFontFamily: draft.theme.headingFontFamily,
+      };
     });
   }
 

@@ -1,6 +1,7 @@
 import { escapeHtml } from '../model/sanitize';
 import type { Presentation } from '../model/types';
 import { renderElementToHtml, sortedElements } from './renderElement';
+import { elementsForPresenting } from '../model/presenting';
 
 /**
  * Presentation Specification → 單一自足 HTML 檔。
@@ -344,7 +345,11 @@ export function renderPresentationToHtml(
   const { showControls = true, includeBranding = true } = options;
   const slidesHtml = presentation.slides
     .map((slide, i) => {
-      const body = sortedElements(slide.elements).map(renderElementToHtml).join('\n      ');
+      const body = sortedElements(
+        elementsForPresenting(slide.elements, presentation.settings.hideIncompleteAi === true),
+      )
+        .map(renderElementToHtml)
+        .join('\n      ');
       return `    <section class="aps-slide${i === 0 ? ' is-active' : ''}" id="aps-slide-${escapeHtml(
         slide.id,
       )}" data-index="${i + 1}" aria-label="${escapeHtml(slide.title)}" data-title="${escapeHtml(

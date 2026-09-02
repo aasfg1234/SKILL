@@ -4,6 +4,7 @@ import { ElementView, sortByZ } from './ElementView';
 import { Icon } from './Icon';
 import { LAYER } from '../lib/layers';
 import { buildPresenterView, previewStepFromKey } from '../model/presenter';
+import { elementsForPresenting } from '../model/presenting';
 
 /** 播放模式：只顯示投影片，不顯示任何編輯器介面。 */
 export function PreviewOverlay() {
@@ -133,7 +134,12 @@ export function PreviewOverlay() {
             flex: '0 0 auto',
           }}
         >
-          {sortByZ(slide.elements).map((el) => (
+          {sortByZ(
+            elementsForPresenting(
+              slide.elements,
+              state.presentation.settings.hideIncompleteAi === true,
+            ),
+          ).map((el) => (
             <ElementView key={el.id} el={el} mode="present" />
           ))}
         </div>
