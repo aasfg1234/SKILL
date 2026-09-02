@@ -41,6 +41,7 @@ export const ELEMENT_TYPE_LABELS: Record<ElementType, string> = {
   ellipse: '圓形',
   line: '線條',
   image: '圖片',
+  table: '表格',
   ai_component: 'AI 元件',
 };
 

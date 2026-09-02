@@ -159,6 +159,13 @@ export function TopBar() {
           },
           { separator: true, label: 'sep1' },
           {
+            label: '搜尋與取代',
+            icon: 'grid',
+            shortcut: 'Ctrl+F',
+            onSelect: () => editorStore.openDialog({ kind: 'find' }),
+          },
+          { separator: true, label: 'sep-find' },
+          {
             label: '複製',
             icon: 'copy',
             shortcut: 'Ctrl+C',

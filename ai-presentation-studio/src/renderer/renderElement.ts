@@ -1,5 +1,6 @@
 import { escapeHtml, sanitizeAiOutput, sanitizeImageSrc } from '../model/sanitize';
 import type { AIComponentElement, SlideElement } from '../model/types';
+import { formatListLines, normalizeListStyle } from '../model/textList';
 
 /**
  * 元素 → HTML 片段。
@@ -117,7 +118,57 @@ export function renderElementToHtml(el: SlideElement): string {
         'white-space': 'pre-wrap',
         'word-break': 'break-word',
       });
-      return `<div class="aps-el aps-text" style="${style}">${escapeHtml(el.text)}</div>`;
+      if (normalizeListStyle(el.listStyle) === 'none') {
+        return `<div class="aps-el aps-text" style="${style}">${escapeHtml(el.text)}</div>`;
+      }
+      const justify =
+        el.align === 'center' ? 'center' : el.align === 'right' ? 'flex-end' : 'flex-start';
+      const lines = formatListLines(el.text, el.listStyle)
+        .map((line) => {
+          const marker = line.marker
+            ? `<span style="flex:0 0 auto;opacity:.75">${escapeHtml(line.marker)}</span>`
+            : '';
+          return `<div style="display:flex;gap:.5em;justify-content:${justify}">${marker}<span style="flex:0 1 auto">${escapeHtml(line.text) || '&nbsp;'}</span></div>`;
+        })
+        .join('');
+      return `<div class="aps-el aps-text" style="${style}">${lines}</div>`;
+    }
+    case 'table': {
+      const rows = el.cells.length;
+      const outer = styleString({ ...boxStyle(el), overflow: 'hidden' });
+      const grid = styleString({
+        display: 'grid',
+        'grid-template-columns': el.columnWidths.map((w) => `${w}fr`).join(' '),
+        'grid-template-rows': `repeat(${rows}, ${100 / Math.max(1, rows)}%)`,
+        width: '100%',
+        height: '100%',
+        'font-size': `${el.fontSize}px`,
+        color: el.color,
+        'font-family': el.fontFamily,
+      });
+      const cells = el.cells
+        .map((line, row) =>
+          line
+            .map((cell, col) => {
+              const cellStyle = styleString({
+                display: 'flex',
+                'align-items': 'center',
+                padding: `${el.cellPadding}px`,
+                'border-right': `1px solid ${el.borderColor}`,
+                'border-bottom': `1px solid ${el.borderColor}`,
+                'border-top': row === 0 ? `1px solid ${el.borderColor}` : undefined,
+                'border-left': col === 0 ? `1px solid ${el.borderColor}` : undefined,
+                background: el.headerRow && row === 0 ? el.headerFill : undefined,
+                'font-weight': el.headerRow && row === 0 ? 700 : 400,
+                overflow: 'hidden',
+                'word-break': 'break-word',
+              });
+              return `<div style="${cellStyle}">${escapeHtml(cell)}</div>`;
+            })
+            .join(''),
+        )
+        .join('');
+      return `<div class="aps-el aps-table" style="${outer}"><div style="${grid}">${cells}</div></div>`;
     }
     case 'rect': {
       const style = styleString({

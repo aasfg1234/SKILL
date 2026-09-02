@@ -6,9 +6,11 @@ import {
   createImageElement,
   createLineElement,
   createRectElement,
+  createTableElement,
   createTextElement,
 } from '../model/factory';
-import type { SlideElement, TextElement } from '../model/types';
+import type { SlideElement, TableElement, TextElement } from '../model/types';
+import { setTableCell, tableCellRects } from '../model/table';
 import { editorStore, useEditorState, type ToolId } from '../store/editorStore';
 import { pickImageFile } from '../lib/files';
 import {
@@ -243,6 +245,11 @@ export function growTextHeight(
   return Math.min(wanted, room);
 }
 
+/** 儲存格內容：統一換行字元，並去掉瀏覽器補在結尾的空行。 */
+function normalizeCellText(value: string): string {
+  return value.replace(/\r\n?/g, '\n').replace(/\n$/, '');
+}
+
 /** 滾輪縮放：往上一格放大一成，往下一格縮小一成。 */
 export function zoomWithWheel(zoom: number, deltaY: number): number {
   const factor = deltaY < 0 ? 1.1 : 1 / 1.1;
@@ -301,6 +308,7 @@ export function Canvas() {
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const spaceHeld = useRef(false);
   const [dropping, setDropping] = useState(false);
+  const pendingTableCell = useRef<{ row: number; col: number } | null>(null);
 
   const zoom = state.zoom;
 
@@ -923,6 +931,9 @@ export function Canvas() {
       case 'rect':
         editorStore.addElement(createRectElement(placement(500, 300)));
         break;
+      case 'table':
+        editorStore.addElement(createTableElement({ ...placement(1200, 360), rows: 3, columns: 3 }));
+        break;
       case 'ellipse':
         editorStore.addElement(createEllipseElement(placement(360, 240)));
         break;
@@ -1007,6 +1018,10 @@ export function Canvas() {
   const editing = slide?.elements.find(
     (el) => el.id === state.editingTextId && el.type === 'text',
   ) as TextElement | undefined;
+
+  const editingTable = slide?.elements.find(
+    (el) => el.id === state.editingTextId && el.type === 'table',
+  ) as TableElement | undefined;
 
   const editableRef = useRef<HTMLDivElement | null>(null);
   useLayoutEffect(() => {
@@ -1141,8 +1156,21 @@ export function Canvas() {
               onContextMenu={(e) => openContextMenu(e, el)}
               onDoubleClick={(e) => {
                 e.stopPropagation();
-                if (el.type === 'text' && !el.locked) {
+                if ((el.type === 'text' || el.type === 'table') && !el.locked) {
                   pendingTextCaret.current = { x: e.clientX, y: e.clientY };
+                  if (el.type === 'table') {
+                    // 雙擊哪一格就編輯哪一格，不用再點一次。
+                    const point = toStage(e.clientX, e.clientY);
+                    const hit = tableCellRects(el).find(
+                      (cell) =>
+                        point.x >= el.x + cell.x &&
+                        point.x <= el.x + cell.x + cell.width &&
+                        point.y >= el.y + cell.y &&
+                        point.y <= el.y + cell.y + cell.height,
+                    );
+                    pendingTableCell.current = hit ? { row: hit.row, col: hit.col } : { row: 0, col: 0 };
+                  }
+                  editorStore.beginTransaction();
                   editorStore.setEditingText(el.id);
                 }
               }}
@@ -1494,6 +1522,76 @@ export function Canvas() {
               }}
             />
           )}
+
+          {/* 表格儲存格直接編輯 */}
+          {editingTable &&
+            tableCellRects(editingTable).map((cell) => (
+              <div
+                key={`${cell.row}-${cell.col}`}
+                contentEditable
+                suppressContentEditableWarning
+                role="textbox"
+                aria-label={`第 ${cell.row + 1} 列第 ${cell.col + 1} 欄`}
+                onPointerDown={(e) => e.stopPropagation()}
+                onInput={(e) =>
+                  editorStore.updateElement(
+                    editingTable.id,
+                    {
+                      cells: setTableCell(
+                        editingTable,
+                        cell.row,
+                        cell.col,
+                        normalizeCellText(e.currentTarget.innerText),
+                      ).cells,
+                    },
+                    { transient: true },
+                  )
+                }
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Escape') {
+                    editorStore.endTransaction();
+                    editorStore.setEditingText(null);
+                  }
+                }}
+                style={{
+                  position: 'absolute',
+                  left: editingTable.x + cell.x,
+                  top: editingTable.y + cell.y,
+                  width: cell.width,
+                  height: cell.height,
+                  padding: editingTable.cellPadding,
+                  display: 'flex',
+                  alignItems: 'center',
+                  fontSize: editingTable.fontSize,
+                  fontWeight: editingTable.headerRow && cell.row === 0 ? 700 : 400,
+                  color: editingTable.color,
+                  fontFamily: editingTable.fontFamily,
+                  background: 'rgba(255,255,255,.94)',
+                  border: `${1.5 / zoom}px solid var(--color-brand)`,
+                  outline: 'none',
+                  overflow: 'hidden',
+                  wordBreak: 'break-word',
+                }}
+                ref={(node) => {
+                  if (!node) return;
+                  if (node.innerText !== editingTable.cells[cell.row][cell.col]) {
+                    node.innerText = editingTable.cells[cell.row][cell.col];
+                  }
+                  const pending = pendingTableCell.current;
+                  if (pending && pending.row === cell.row && pending.col === cell.col) {
+                    pendingTableCell.current = null;
+                    node.focus({ preventScroll: true });
+                    const range = document.createRange();
+                    range.selectNodeContents(node);
+                    range.collapse(false);
+                    const selection = window.getSelection();
+                    selection?.removeAllRanges();
+                    selection?.addRange(range);
+                  }
+                }}
+              />
+            ))}
 
           {/* 文字直接編輯 */}
           {editing && (

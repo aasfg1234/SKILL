@@ -31,6 +31,11 @@ function useGlobalShortcuts() {
         saveNow();
         return;
       }
+      if (mod && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        editorStore.openDialog({ kind: 'find' });
+        return;
+      }
       if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (e.shiftKey) editorStore.redo();

@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { sanitizeAiOutput, sanitizeImageSrc } from '../model/sanitize';
 import type { AIComponentElement, SlideElement } from '../model/types';
 import { AI_KIND_LABELS, AI_STATUS_ICON, AI_STATUS_LABELS } from '../lib/labels';
+import { formatListLines, normalizeListStyle } from '../model/textList';
 
 /**
  * 畫布 / 縮圖 / 播放模式共用的元素外觀。
@@ -152,9 +153,73 @@ export function ElementView({ el, mode }: { el: SlideElement; mode: ViewMode }) 
             wordBreak: 'break-word',
           }}
         >
-          {el.text}
+          {normalizeListStyle(el.listStyle) === 'none'
+            ? el.text
+            : formatListLines(el.text, el.listStyle).map((line, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: 'flex',
+                    gap: '0.5em',
+                    textAlign: el.align,
+                    justifyContent:
+                      el.align === 'center'
+                        ? 'center'
+                        : el.align === 'right'
+                          ? 'flex-end'
+                          : 'flex-start',
+                  }}
+                >
+                  {line.marker && (
+                    <span style={{ flex: '0 0 auto', opacity: 0.75 }}>{line.marker}</span>
+                  )}
+                  <span style={{ flex: '0 1 auto' }}>{line.text || ' '}</span>
+                </div>
+              ))}
         </div>
       );
+    case 'table': {
+      const rows = el.cells.length;
+      return (
+        <div style={{ ...style, overflow: 'hidden' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: el.columnWidths.map((w) => `${w}fr`).join(' '),
+              gridTemplateRows: `repeat(${rows}, ${100 / Math.max(1, rows)}%)`,
+              width: '100%',
+              height: '100%',
+              fontSize: el.fontSize,
+              color: el.color,
+              fontFamily: el.fontFamily,
+            }}
+          >
+            {el.cells.map((line, row) =>
+              line.map((cell, col) => (
+                <div
+                  key={`${row}-${col}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: el.cellPadding,
+                    borderRight: `1px solid ${el.borderColor}`,
+                    borderBottom: `1px solid ${el.borderColor}`,
+                    borderTop: row === 0 ? `1px solid ${el.borderColor}` : undefined,
+                    borderLeft: col === 0 ? `1px solid ${el.borderColor}` : undefined,
+                    background: el.headerRow && row === 0 ? el.headerFill : undefined,
+                    fontWeight: el.headerRow && row === 0 ? 700 : 400,
+                    overflow: 'hidden',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {cell}
+                </div>
+              )),
+            )}
+          </div>
+        </div>
+      );
+    }
     case 'rect':
       return (
         <div

@@ -14,6 +14,12 @@ import {
 import { simulateAiCompletion } from '../actions';
 import { pickImageFile } from '../lib/files';
 import { Icon } from './Icon';
+import {
+  insertTableColumn,
+  insertTableRow,
+  removeTableColumn,
+  removeTableRow,
+} from '../model/table';
 
 /** 右側屬性面板：位置、大小、樣式與 AI 設定。 */
 
@@ -506,12 +512,112 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
               </ToggleButton>
             ))}
           </div>
+          <Field label="條列">
+            <div className="flex gap-1">
+              {(
+                [
+                  ['none', '無'],
+                  ['bullet', '• 項目符號'],
+                  ['number', '1. 編號'],
+                ] as const
+              ).map(([style, label]) => (
+                <ToggleButton
+                  key={style}
+                  active={el.listStyle === style}
+                  onClick={() => update({ listStyle: style })}
+                  title={label}
+                >
+                  <span className="text-[11px]">{label}</span>
+                </ToggleButton>
+              ))}
+            </div>
+          </Field>
           <Field label="文字顏色">
             <ColorInput value={el.color} onChange={(v) => update({ color: v })} />
           </Field>
           <Field label="字距">
             <NumberInput value={el.letterSpacing} step={0.5} onChange={(v) => update({ letterSpacing: v })} suffix="px" />
           </Field>
+        </Section>
+      )}
+
+      {!multi && el.type === 'table' && (
+        <Section title="表格" icon="grid">
+          <div className="grid grid-cols-2 gap-2">
+            <Field label={`列數（${el.cells.length}）`}>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  className="tool-btn flex-1 justify-center"
+                  onClick={() => update({ cells: insertTableRow(el, el.cells.length).cells })}
+                >
+                  ＋
+                </button>
+                <button
+                  type="button"
+                  className="tool-btn flex-1 justify-center"
+                  disabled={el.cells.length <= 1}
+                  onClick={() => update({ cells: removeTableRow(el, el.cells.length - 1).cells })}
+                >
+                  －
+                </button>
+              </div>
+            </Field>
+            <Field label={`欄數（${el.cells[0]?.length ?? 0}）`}>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  className="tool-btn flex-1 justify-center"
+                  onClick={() => {
+                    const next = insertTableColumn(el, el.cells[0]?.length ?? 0);
+                    update({ cells: next.cells, columnWidths: next.columnWidths });
+                  }}
+                >
+                  ＋
+                </button>
+                <button
+                  type="button"
+                  className="tool-btn flex-1 justify-center"
+                  disabled={(el.cells[0]?.length ?? 0) <= 1}
+                  onClick={() => {
+                    const next = removeTableColumn(el, (el.cells[0]?.length ?? 1) - 1);
+                    update({ cells: next.cells, columnWidths: next.columnWidths });
+                  }}
+                >
+                  －
+                </button>
+              </div>
+            </Field>
+          </div>
+          <div className="flex gap-1">
+            <ToggleButton
+              active={el.headerRow}
+              onClick={() => update({ headerRow: !el.headerRow })}
+              title="第一列當成標題列"
+            >
+              <span className="text-[11px]">標題列</span>
+            </ToggleButton>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="字級">
+              <NumberInput value={el.fontSize} min={1} onChange={(v) => v > 0 && update({ fontSize: v })} suffix="px" />
+            </Field>
+            <Field label="格內留白">
+              <NumberInput value={el.cellPadding} min={0} onChange={(v) => update({ cellPadding: Math.max(0, v) })} suffix="px" />
+            </Field>
+          </div>
+          <Field label="文字顏色">
+            <ColorInput value={el.color} onChange={(v) => update({ color: v })} />
+          </Field>
+          <Field label="框線顏色">
+            <ColorInput value={el.borderColor} onChange={(v) => update({ borderColor: v })} />
+          </Field>
+          <Field label="標題列底色">
+            <ColorInput value={el.headerFill} onChange={(v) => update({ headerFill: v })} />
+          </Field>
+          <p className="text-[11px] leading-snug text-ink-3">
+            雙擊表格可以直接編輯每一格。這一版不支援儲存格合併。
+          </p>
         </Section>
       )}
 

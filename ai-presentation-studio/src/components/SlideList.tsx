@@ -84,7 +84,11 @@ export function SlideList() {
         <div className="flex items-center gap-1.5 text-[12px] font-bold">
           <Icon name="slides" size={14} />
           投影片
-          <span className="text-ink-3">（{slides.length}）</span>
+          <span className="text-ink-3">
+            {state.selectedSlideIds.length > 1
+              ? `（已選 ${state.selectedSlideIds.length} / ${slides.length}）`
+              : `（${slides.length}）`}
+          </span>
         </div>
         <button
           type="button"
@@ -102,6 +106,7 @@ export function SlideList() {
         {slides.map((slide, index) => {
           const active = slide.id === state.currentSlideId;
           const aiCount = slide.elements.filter((el) => el.type === 'ai_component').length;
+          const inSelection = state.selectedSlideIds.includes(slide.id);
           const pendingCount = slide.elements.filter(
             (el) => el.type === 'ai_component' && el.status !== 'completed',
           ).length;
@@ -110,17 +115,27 @@ export function SlideList() {
               key={slide.id}
               className="group relative rounded-lg p-1.5 transition"
               data-slide-id={slide.id}
-              aria-label={`投影片 ${index + 1}：${slide.title}，可拖曳調整順序`}
+              aria-label={`投影片 ${index + 1}：${slide.title}，可拖曳調整順序；Ctrl 點選可加選，Shift 點選可連選`}
+              aria-selected={inSelection}
               style={{
-                background: active ? 'var(--color-brand-soft)' : 'transparent',
-                outline: active ? '1.5px solid var(--color-brand)' : '1px solid transparent',
+                background: active || inSelection ? 'var(--color-brand-soft)' : 'transparent',
+                outline: active
+                  ? '1.5px solid var(--color-brand)'
+                  : inSelection
+                    ? '1.5px dashed var(--color-brand)'
+                    : '1px solid transparent',
                 cursor: draggingId === slide.id ? 'grabbing' : 'grab',
                 opacity: draggingId === slide.id ? 0.55 : 1,
                 userSelect: 'none',
               }}
-              onClick={() => {
+              onClick={(event) => {
                 if (suppressClick.current) return;
-                editorStore.selectSlide(slide.id);
+                const mode = event.shiftKey
+                  ? 'range'
+                  : event.ctrlKey || event.metaKey
+                    ? 'toggle'
+                    : 'replace';
+                editorStore.selectSlide(slide.id, mode);
               }}
               onPointerDown={(event) => {
                 if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
@@ -221,7 +236,11 @@ export function SlideList() {
                     aria-label={`複製第 ${index + 1} 張投影片`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      editorStore.duplicateSlide(slide.id);
+                      if (inSelection && state.selectedSlideIds.length > 1) {
+                        editorStore.duplicateSelectedSlides();
+                      } else {
+                        editorStore.duplicateSlide(slide.id);
+                      }
                     }}
                   >
                     <Icon name="copy" size={13} />

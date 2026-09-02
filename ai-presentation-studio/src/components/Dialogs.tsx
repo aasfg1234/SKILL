@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { editorStore, useEditorState } from '../store/editorStore';
 import { LAYER } from '../lib/layers';
 import type { ValidationReport } from '../model/types';
@@ -7,6 +7,7 @@ import { copyToClipboard } from '../lib/files';
 import { exportValidationReport } from '../actions';
 import { Icon } from './Icon';
 import { SLIDE_LAYOUTS } from '../model/layouts';
+import { findInPresentation } from '../model/search';
 
 function Modal({
   title,
@@ -315,6 +316,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ['Ctrl + C / Ctrl + V', '複製 / 貼上'],
   ['Ctrl + D', '再製'],
   ['Ctrl + A', '全選本頁'],
+  ['Ctrl + F', '搜尋與取代'],
   ['Ctrl + G', '建立群組'],
   ['Ctrl + Shift + G', '取消群組'],
   ['Ctrl + 0', '符合視窗'],
@@ -328,6 +330,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ['雙擊文字', '直接編輯文字'],
   ['Shift + 點選', '複選元素'],
   ['右鍵', '開啟快捷選單'],
+  ['Ctrl / Shift + 點縮圖', '加選 / 連選投影片'],
   ['空白鍵 + 拖曳', '平移畫布'],
   ['Alt + 拖曳', '暫時關閉自動對齊'],
 ];
@@ -492,6 +495,101 @@ function LayoutDialog({ afterSlideId }: { afterSlideId?: string }) {
   );
 }
 
+function FindDialog() {
+  const state = useEditorState();
+  const [query, setQuery] = useState('');
+  const [replacement, setReplacement] = useState('');
+  const [caseSensitive, setCaseSensitive] = useState(false);
+
+  const hits = useMemo(
+    () => findInPresentation(state.presentation, query, { caseSensitive }),
+    [state.presentation, query, caseSensitive],
+  );
+  const total = hits.reduce((sum, hit) => sum + hit.count, 0);
+
+  return (
+    <Modal
+      title="搜尋與取代"
+      subtitle="找的是文字元素與表格的內容"
+      width={560}
+      footer={
+        <>
+          <span className="mr-auto text-[11.5px] text-ink-3">
+            {query.trim() === '' ? '輸入要找的文字' : `找到 ${total} 處，分布在 ${hits.length} 個元素`}
+          </span>
+          <button type="button" className="tool-btn" onClick={() => editorStore.closeDialog()}>
+            關閉
+          </button>
+          <button
+            type="button"
+            className="tool-btn font-bold"
+            disabled={total === 0}
+            style={{ background: 'var(--color-brand)', color: 'var(--color-brand-ink)' }}
+            onClick={() => {
+              editorStore.replaceAllText(query, replacement, { caseSensitive });
+              editorStore.closeDialog();
+            }}
+          >
+            全部取代
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-2.5">
+        <label className="block">
+          <span className="mb-1 block text-[11px] text-ink-3">搜尋</span>
+          <input
+            autoFocus
+            className="field-input"
+            value={query}
+            placeholder="要找的文字"
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[11px] text-ink-3">取代為</span>
+          <input
+            className="field-input"
+            value={replacement}
+            placeholder="留空代表刪除找到的文字"
+            onChange={(e) => setReplacement(e.target.value)}
+          />
+        </label>
+        <label className="flex items-center gap-2 text-[11.5px] text-ink-2">
+          <input
+            type="checkbox"
+            checked={caseSensitive}
+            onChange={(e) => setCaseSensitive(e.target.checked)}
+          />
+          區分英文大小寫
+        </label>
+
+        {hits.length > 0 && (
+          <div className="max-h-[240px] space-y-1 overflow-y-auto pt-1">
+            {hits.map((hit) => (
+              <button
+                key={`${hit.slideId}-${hit.elementId}`}
+                type="button"
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition hover:bg-panel-2"
+                onClick={() => {
+                  editorStore.gotoHit(hit.slideId, hit.elementId);
+                  editorStore.closeDialog();
+                }}
+              >
+                <span className="shrink-0 font-mono text-[11px] text-ink-3">
+                  第 {hit.slideIndex + 1} 頁
+                </span>
+                <span className="flex-1 truncate text-[12px]">{hit.preview}</span>
+                <span className="shrink-0 text-[11px] text-ink-3">{hit.count} 處</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 export function Dialogs() {
   const state = useEditorState();
   const dialog = state.dialog;
@@ -508,6 +606,8 @@ export function Dialogs() {
       return <SettingsDialog />;
     case 'help':
       return <HelpDialog />;
+    case 'find':
+      return <FindDialog />;
     case 'layout':
       return <LayoutDialog afterSlideId={dialog.afterSlideId} />;
     case 'confirm':

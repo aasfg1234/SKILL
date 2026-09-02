@@ -12,10 +12,12 @@ import {
   type RectElement,
   type Slide,
   type SlideElement,
+  type TableElement,
   type TextElement,
   type Theme,
 } from './types';
 import { newElementId, newId, newPresentationId, newSlideId, nextTaskId } from './ids';
+import { evenColumnWidths } from './table';
 
 export const DEFAULT_WIDTH = 1920;
 export const DEFAULT_HEIGHT = 1080;
@@ -116,6 +118,37 @@ export function createTextElement(
     color: init.color ?? '#111827',
     lineHeight: init.lineHeight ?? 1.4,
     letterSpacing: init.letterSpacing ?? 0,
+    listStyle: init.listStyle ?? 'none',
+    ...(init.fontFamily ? { fontFamily: init.fontFamily } : {}),
+  };
+}
+
+/**
+ * 建立表格。
+ *
+ * 可以用 rows / columns 指定大小，也可以直接給 cells。
+ * 欄寬用比例存，總和為 1，這樣縮放表格時欄位比例不會跑掉。
+ */
+export function createTableElement(
+  init: BaseInit & Partial<TableElement> & { rows?: number; columns?: number } = {},
+): TableElement {
+  const rowCount = Math.max(1, init.cells?.length ?? init.rows ?? 3);
+  const columnCount = Math.max(1, init.cells?.[0]?.length ?? init.columns ?? 3);
+  const cells =
+    init.cells?.map((line) => [...line]) ??
+    Array.from({ length: rowCount }, () => Array.from({ length: columnCount }, () => ''));
+
+  return {
+    ...base('table', init, 1200, 480),
+    type: 'table',
+    cells,
+    columnWidths: init.columnWidths ?? evenColumnWidths(columnCount),
+    headerRow: init.headerRow ?? true,
+    fontSize: init.fontSize ?? 32,
+    color: init.color ?? '#111827',
+    borderColor: init.borderColor ?? '#D1D5DB',
+    headerFill: init.headerFill ?? '#F3F4F6',
+    cellPadding: init.cellPadding ?? 16,
     ...(init.fontFamily ? { fontFamily: init.fontFamily } : {}),
   };
 }

@@ -9,6 +9,8 @@ import {
 } from '../model/factory';
 import { createDemoPresentation } from '../model/demo';
 import { buildLayoutElements } from '../model/layouts';
+import { replaceInPresentation, type SearchOptions } from '../model/search';
+import { resolveSlideSelection, type SlideSelectMode } from '../lib/slideSelection';
 import { newGroupId, nextTaskId } from '../model/ids';
 import { applyPatch, mergeCompletedPresentation, type MergeSummary } from '../model/patch';
 import type {
@@ -34,6 +36,7 @@ export type ToolId =
   | 'ellipse'
   | 'line'
   | 'image'
+  | 'table'
   | 'ai_component';
 
 export interface ToastMessage {
@@ -50,6 +53,7 @@ export type DialogState =
   | { kind: 'settings' }
   | { kind: 'help' }
   | { kind: 'layout'; afterSlideId?: string }
+  | { kind: 'find' }
   | {
       kind: 'confirm';
       title: string;
@@ -63,6 +67,8 @@ export type DialogState =
 export interface EditorState {
   presentation: Presentation;
   currentSlideId: string;
+  /** 投影片列表的多選結果；一般情況只有目前這一張 */
+  selectedSlideIds: string[];
   selectedIds: string[];
   tool: ToolId;
   zoom: number;
@@ -112,6 +118,7 @@ function initialState(): EditorState {
   return {
     presentation,
     currentSlideId,
+    selectedSlideIds: [currentSlideId],
     selectedIds: [],
     tool: 'select',
     zoom: 0.4,
@@ -253,6 +260,7 @@ class EditorStore {
     const ids = new Set(slide?.elements.map((el) => el.id) ?? []);
     this.set({
       currentSlideId: slide?.id ?? '',
+      selectedSlideIds: slide ? [slide.id] : [],
       selectedIds: selectedIds.filter((id) => ids.has(id)),
       editingTextId: null,
     });
@@ -374,9 +382,97 @@ class EditorStore {
     return this.state.presentation.slides.find((s) => s.id === this.state.currentSlideId);
   }
 
-  selectSlide(slideId: string): void {
+  selectSlide(slideId: string, mode: SlideSelectMode = 'replace'): void {
     if (!this.state.presentation.slides.some((s) => s.id === slideId)) return;
-    this.set({ currentSlideId: slideId, selectedIds: [], editingTextId: null });
+    const allIds = this.state.presentation.slides.map((s) => s.id);
+    const selectedSlideIds = resolveSlideSelection(
+      allIds,
+      this.state.selectedSlideIds,
+      slideId,
+      mode,
+    );
+    this.set({
+      currentSlideId: selectedSlideIds.includes(slideId)
+        ? slideId
+        : (selectedSlideIds[0] ?? slideId),
+      selectedSlideIds,
+      selectedIds: [],
+      editingTextId: null,
+    });
+  }
+
+  /** 刪除目前選取的所有投影片；至少保留一張。 */
+  deleteSelectedSlides(): void {
+    const targets = this.state.selectedSlideIds;
+    if (targets.length <= 1) {
+      this.deleteSlide(targets[0] ?? this.state.currentSlideId);
+      return;
+    }
+    const remaining = this.state.presentation.slides.filter((s) => !targets.includes(s.id));
+    if (remaining.length === 0) {
+      this.toast({ tone: 'warning', title: '至少要保留一張投影片' });
+      return;
+    }
+    const index = this.state.presentation.slides.findIndex((s) => targets.includes(s.id));
+    this.commit((draft) => {
+      draft.slides = draft.slides.filter((s) => !targets.includes(s.id));
+    });
+    const slides = this.state.presentation.slides;
+    const next = slides[Math.min(index, slides.length - 1)];
+    this.set({ currentSlideId: next.id, selectedSlideIds: [next.id], selectedIds: [] });
+    this.toast({
+      tone: 'info',
+      title: `已刪除 ${targets.length} 張投影片`,
+      detail: '按 Ctrl+Z 可以復原。',
+    });
+  }
+
+  /** 複製目前選取的所有投影片，接在最後一張選取的後面。 */
+  duplicateSelectedSlides(): void {
+    const targets = this.state.selectedSlideIds;
+    if (targets.length <= 1) {
+      this.duplicateSlide(targets[0] ?? this.state.currentSlideId);
+      return;
+    }
+    const copies: string[] = [];
+    this.commit((draft) => {
+      const sources = draft.slides.filter((s) => targets.includes(s.id));
+      const lastIndex = Math.max(...targets.map((id) => draft.slides.findIndex((s) => s.id === id)));
+      const cloned = sources.map((slide) => {
+        const copy = cloneSlide(slide, draft);
+        copies.push(copy.id);
+        return copy;
+      });
+      draft.slides.splice(lastIndex + 1, 0, ...cloned);
+    });
+    this.set({
+      currentSlideId: copies[0] ?? this.state.currentSlideId,
+      selectedSlideIds: copies,
+      selectedIds: [],
+    });
+    this.toast({ tone: 'success', title: `已複製 ${copies.length} 張投影片` });
+  }
+
+  /** 全簡報取代文字；可以復原。 */
+  replaceAllText(query: string, replacement: string, options: SearchOptions = {}): number {
+    const result = replaceInPresentation(this.state.presentation, query, replacement, options);
+    if (result.replaced === 0) {
+      this.toast({ tone: 'info', title: '找不到符合的文字' });
+      return 0;
+    }
+    this.commit(() => result.presentation);
+    this.toast({
+      tone: 'success',
+      title: `已取代 ${result.replaced} 處`,
+      detail: '按 Ctrl+Z 可以復原。',
+    });
+    return result.replaced;
+  }
+
+  /** 跳到搜尋結果所在的位置並選取該元素。 */
+  gotoHit(slideId: string, elementId: string): void {
+    this.selectSlide(slideId);
+    this.set({ selectedIds: [elementId] });
   }
 
   addSlide(afterSlideId?: string, layoutId?: string): void {
@@ -396,13 +492,26 @@ class EditorStore {
     this.commit((draft) => {
       draft.slides.splice(index, 0, slide);
     });
-    this.set({ currentSlideId: slide.id, selectedIds: [] });
+    this.set({ currentSlideId: slide.id, selectedSlideIds: [slide.id], selectedIds: [] });
   }
 
   /** 刪除投影片前先問過。真正的刪除仍然走 deleteSlide，因此可以復原。 */
   requestDeleteSlide(slideId: string): void {
     if (this.state.presentation.slides.length <= 1) {
       this.toast({ tone: 'warning', title: '至少要保留一張投影片' });
+      return;
+    }
+    const targets = this.state.selectedSlideIds;
+    const many = targets.length > 1 && targets.includes(slideId);
+    if (many) {
+      this.openDialog({
+        kind: 'confirm',
+        title: '刪除投影片',
+        message: `確定要刪除選取的 ${targets.length} 張投影片嗎？刪除後可以按 Ctrl+Z 復原。`,
+        confirmLabel: '刪除',
+        danger: true,
+        onConfirm: () => this.deleteSelectedSlides(),
+      });
       return;
     }
     const slide = this.state.presentation.slides.find((s) => s.id === slideId);
@@ -447,7 +556,7 @@ class EditorStore {
     });
     const slides = this.state.presentation.slides;
     const next = slides[Math.min(index, slides.length - 1)];
-    this.set({ currentSlideId: next.id, selectedIds: [] });
+    this.set({ currentSlideId: next.id, selectedSlideIds: [next.id], selectedIds: [] });
     this.toast({
       tone: 'info',
       title: `已刪除投影片「${title}」`,
@@ -463,7 +572,7 @@ class EditorStore {
       const index = draft.slides.findIndex((s) => s.id === slideId) + 1;
       draft.slides.splice(index, 0, copy);
     });
-    this.set({ currentSlideId: copy.id, selectedIds: [] });
+    this.set({ currentSlideId: copy.id, selectedSlideIds: [copy.id], selectedIds: [] });
   }
 
   moveSlide(slideId: string, direction: -1 | 1): void {
@@ -919,6 +1028,7 @@ class EditorStore {
     this.set({
       presentation: synced,
       currentSlideId: synced.slides[0]?.id ?? '',
+      selectedSlideIds: synced.slides[0] ? [synced.slides[0].id] : [],
       selectedIds: [],
       editingTextId: null,
       dirty: true,

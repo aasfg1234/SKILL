@@ -40,6 +40,7 @@ export type ElementType =
   | 'ellipse'
   | 'line'
   | 'image'
+  | 'table'
   | 'ai_component';
 
 export interface BaseElement {
@@ -66,6 +67,9 @@ export interface BaseElement {
 export type TextAlign = 'left' | 'center' | 'right';
 export type VerticalAlign = 'top' | 'middle' | 'bottom';
 
+/** 條列樣式：無、項目符號、編號 */
+export type ListStyle = 'none' | 'bullet' | 'number';
+
 export interface TextElement extends BaseElement {
   type: 'text';
   text: string;
@@ -79,6 +83,24 @@ export interface TextElement extends BaseElement {
   color: string;
   lineHeight: number;
   letterSpacing: number;
+  /** 每一行前面要不要加符號或編號 */
+  listStyle: ListStyle;
+}
+
+export interface TableElement extends BaseElement {
+  type: 'table';
+  /** cells[列][欄]；這一版不支援儲存格合併 */
+  cells: string[][];
+  /** 每一欄佔總寬的比例，總和為 1 */
+  columnWidths: number[];
+  /** 第一列是否當成標題列 */
+  headerRow: boolean;
+  fontSize: number;
+  fontFamily?: string;
+  color: string;
+  borderColor: string;
+  headerFill: string;
+  cellPadding: number;
 }
 
 export interface RectElement extends BaseElement {
@@ -151,6 +173,7 @@ export interface AIComponentElement extends BaseElement {
 
 export type SlideElement =
   | TextElement
+  | TableElement
   | RectElement
   | EllipseElement
   | LineElement
