@@ -37,6 +37,31 @@ export function formatElapsed(ms: number): string {
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(rest)}` : `${pad(minutes)}:${pad(rest)}`;
 }
 
+/**
+ * 播放時的換頁按鍵。
+ *
+ * 回傳 1 代表下一頁，-1 代表上一頁，0 代表這個鍵不換頁。
+ * 編輯器與匯出的 HTML 共用同一份對照，行為才會一致。
+ */
+export function previewStepFromKey(key: string): number {
+  switch (key) {
+    case 'ArrowRight':
+    case 'ArrowDown':
+    case 'PageDown':
+    case ' ':
+    case 'Spacebar':
+    case 'Enter':
+      return 1;
+    case 'ArrowLeft':
+    case 'ArrowUp':
+    case 'PageUp':
+    case 'Backspace':
+      return -1;
+    default:
+      return 0;
+  }
+}
+
 interface SlideLike {
   title: string;
   notes: string;

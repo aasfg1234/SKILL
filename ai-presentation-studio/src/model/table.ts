@@ -96,6 +96,32 @@ export function insertTableColumn(el: TableElement, at: number): TableElement {
   return { ...el, cells, columnWidths: normalizeWidths(widths) };
 }
 
+/** 欄寬的下限，避免被拖到看不見。 */
+const MIN_COLUMN_RATIO = 0.05;
+
+/**
+ * 拖曳第 at 欄右側的欄線。
+ *
+ * 只影響相鄰的兩欄，其他欄不動，所以整體總和保持 1。
+ * 最後一欄右側沒有欄線可拖，原樣回傳。
+ */
+export function resizeTableColumn(el: TableElement, at: number, delta: number): TableElement {
+  const cols = el.cells[0]?.length ?? 0;
+  if (at < 0 || at >= cols - 1) return el;
+
+  const widths = normalizeWidths(el.columnWidths.slice(0, cols));
+  const pair = widths[at] + widths[at + 1];
+  const next = Math.min(
+    pair - MIN_COLUMN_RATIO,
+    Math.max(MIN_COLUMN_RATIO, widths[at] + delta),
+  );
+  if (Math.abs(next - widths[at]) < 1e-9) return el;
+
+  widths[at] = next;
+  widths[at + 1] = pair - next;
+  return { ...el, columnWidths: widths };
+}
+
 /** 刪除第 at 欄；至少保留一欄。 */
 export function removeTableColumn(el: TableElement, at: number): TableElement {
   const cols = el.cells[0]?.length ?? 0;

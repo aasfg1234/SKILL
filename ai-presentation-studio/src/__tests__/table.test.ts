@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createTableElement } from '../model/factory';
 import {
   insertTableColumn,
+  resizeTableColumn,
   insertTableRow,
   removeTableColumn,
   removeTableRow,
@@ -66,5 +67,27 @@ describe('表格', () => {
 
     expect(rows.cells).toHaveLength(1);
     expect(single.cells[0]).toHaveLength(1);
+  });
+
+  it('拖曳欄線只會影響相鄰兩欄，總和仍然是 1', () => {
+    const next = resizeTableColumn(table(), 0, 0.1);
+
+    expect(next.columnWidths[0]).toBeCloseTo(1 / 3 + 0.1, 6);
+    expect(next.columnWidths[1]).toBeCloseTo(1 / 3 - 0.1, 6);
+    expect(next.columnWidths[2]).toBeCloseTo(1 / 3, 6);
+    expect(next.columnWidths.reduce((sum, w) => sum + w, 0)).toBeCloseTo(1, 6);
+  });
+
+  it('欄寬不會被拖到小於下限', () => {
+    const next = resizeTableColumn(table(), 0, -1);
+
+    expect(next.columnWidths[0]).toBeGreaterThan(0);
+    expect(next.columnWidths.reduce((sum, w) => sum + w, 0)).toBeCloseTo(1, 6);
+  });
+
+  it('最後一欄沒有右側欄線可以拖，原樣回傳', () => {
+    const el = table();
+
+    expect(resizeTableColumn(el, 2, 0.1)).toBe(el);
   });
 });

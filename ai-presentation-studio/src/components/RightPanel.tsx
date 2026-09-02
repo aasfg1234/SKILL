@@ -4,6 +4,8 @@ import { AI_KIND_LABELS, AI_STATUS_ICON, AI_STATUS_LABELS } from '../lib/labels'
 import { copyAiInstruction, exportAiPackage, importCompleted, simulateAiCompletion } from '../actions';
 import { AI_KIND_ICON, Icon } from './Icon';
 import { Inspector } from './Inspector';
+import { buildLayerList } from '../model/layerList';
+import { ELEMENT_TYPE_LABELS } from '../lib/labels';
 
 /** AI 任務面板：每個任務都可以直接跳到對應的投影片與元素。 */
 function AiTaskPanel() {
@@ -157,8 +159,118 @@ function AiTaskPanel() {
   );
 }
 
+const LAYER_ICON: Record<string, string> = {
+  text: 'text',
+  table: 'grid',
+  rect: 'square',
+  ellipse: 'circle',
+  line: 'line',
+  image: 'image',
+  ai_component: 'sparkles',
+};
+
+/** 圖層面板：由上而下列出這一頁的元素，順序與畫布的疊放一致。 */
+function LayerPanel() {
+  const state = useEditorState();
+  const slide = state.presentation.slides.find((s) => s.id === state.currentSlideId);
+  const items = slide ? buildLayerList(slide) : [];
+
+  if (items.length === 0) {
+    return (
+      <div className="px-4 py-10 text-center text-[11.5px] leading-relaxed text-ink-3">
+        這一頁還沒有任何元素。
+        <br />
+        用下方工具列新增文字、圖形、圖片或表格。
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div
+        className="border-b px-3.5 py-2 text-[11px] text-ink-3"
+        style={{ borderColor: 'var(--color-line-2)' }}
+      >
+        由上而下＝畫布上的疊放順序，第一個蓋在最上面
+      </div>
+      <ul className="flex-1 space-y-0.5 overflow-y-auto p-2">
+        {items.map((item) => {
+          const active = state.selectedIds.includes(item.id);
+          return (
+            <li key={item.id}>
+              <div
+                className="flex items-center gap-1 rounded-lg px-1.5 py-1 transition hover:bg-panel-2"
+                style={{ background: active ? 'var(--color-brand-soft)' : 'transparent' }}
+              >
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  title={`選取${ELEMENT_TYPE_LABELS[item.type]}：${item.label}`}
+                  onClick={() => editorStore.select([item.id])}
+                >
+                  <span className="shrink-0 text-ink-3">
+                    <Icon name={LAYER_ICON[item.type] ?? 'square'} size={14} />
+                  </span>
+                  <span
+                    className="truncate text-[12px]"
+                    style={{ opacity: item.hidden ? 0.45 : 1 }}
+                  >
+                    {item.label}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="tool-btn px-1 py-0.5"
+                  title={item.hidden ? '顯示' : '隱藏'}
+                  aria-label={`${item.hidden ? '顯示' : '隱藏'}：${item.label}`}
+                  data-active={item.hidden}
+                  onClick={() => editorStore.updateElement(item.id, { hidden: !item.hidden })}
+                >
+                  <Icon name={item.hidden ? 'eye-off' : 'eye'} size={13} />
+                </button>
+                <button
+                  type="button"
+                  className="tool-btn px-1 py-0.5"
+                  title={item.locked ? '解除鎖定' : '鎖定'}
+                  aria-label={`${item.locked ? '解除鎖定' : '鎖定'}：${item.label}`}
+                  data-active={item.locked}
+                  onClick={() => editorStore.updateElement(item.id, { locked: !item.locked })}
+                >
+                  <Icon name={item.locked ? 'lock' : 'unlock'} size={13} />
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="border-t p-2" style={{ borderColor: 'var(--color-line)' }}>
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            className="tool-btn flex-1 justify-center"
+            disabled={state.selectedIds.length === 0}
+            onClick={() => editorStore.reorder('forward')}
+          >
+            <Icon name="up" size={13} />
+            往上一層
+          </button>
+          <button
+            type="button"
+            className="tool-btn flex-1 justify-center"
+            disabled={state.selectedIds.length === 0}
+            onClick={() => editorStore.reorder('backward')}
+          >
+            <Icon name="down" size={13} />
+            往下一層
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function RightPanel() {
-  const [tab, setTab] = useState<'inspector' | 'tasks'>('inspector');
+  const [tab, setTab] = useState<'inspector' | 'layers' | 'tasks'>('inspector');
   const state = useEditorState();
   const pending = state.presentation.aiTasks.filter((t) => t.status !== 'completed').length;
 
@@ -183,6 +295,15 @@ export function RightPanel() {
         <button
           type="button"
           className="tool-btn flex-1 justify-center"
+          data-active={tab === 'layers'}
+          onClick={() => setTab('layers')}
+        >
+          <Icon name="layers" size={14} />
+          圖層
+        </button>
+        <button
+          type="button"
+          className="tool-btn flex-1 justify-center"
           data-active={tab === 'tasks'}
           onClick={() => setTab('tasks')}
         >
@@ -199,7 +320,9 @@ export function RightPanel() {
         </button>
       </div>
       <div className="min-h-0 flex-1">
-        {tab === 'inspector' ? <Inspector /> : <AiTaskPanel />}
+        {tab === 'inspector' && <Inspector />}
+        {tab === 'layers' && <LayerPanel />}
+        {tab === 'tasks' && <AiTaskPanel />}
       </div>
     </aside>
   );

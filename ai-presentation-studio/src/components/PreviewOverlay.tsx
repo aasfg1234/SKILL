@@ -3,7 +3,7 @@ import { editorStore, useEditorState } from '../store/editorStore';
 import { ElementView, sortByZ } from './ElementView';
 import { Icon } from './Icon';
 import { LAYER } from '../lib/layers';
-import { buildPresenterView } from '../model/presenter';
+import { buildPresenterView, previewStepFromKey } from '../model/presenter';
 
 /** 播放模式：只顯示投影片，不顯示任何編輯器介面。 */
 export function PreviewOverlay() {
@@ -62,18 +62,13 @@ export function PreviewOverlay() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const step = previewStepFromKey(e.key);
+      if (step !== 0) {
+        editorStore.setPreviewIndex(editorStore.getState().previewIndex + step);
+        e.preventDefault();
+        return;
+      }
       switch (e.key) {
-        case 'ArrowRight':
-        case 'PageDown':
-        case ' ':
-          editorStore.setPreviewIndex(editorStore.getState().previewIndex + 1);
-          e.preventDefault();
-          break;
-        case 'ArrowLeft':
-        case 'PageUp':
-          editorStore.setPreviewIndex(editorStore.getState().previewIndex - 1);
-          e.preventDefault();
-          break;
         case 'Home':
           editorStore.setPreviewIndex(0);
           break;
@@ -116,7 +111,16 @@ export function PreviewOverlay() {
       className="fixed inset-0 flex flex-col"
       style={{ background: '#0B0D10', zIndex: LAYER.preview }}
     >
-      <div ref={wrapRef} className="flex flex-1 items-center justify-center overflow-hidden">
+      {/* 點畫面往下一頁，右鍵往上一頁；跟一般簡報軟體一致 */}
+      <div
+        ref={wrapRef}
+        className="flex flex-1 cursor-pointer items-center justify-center overflow-hidden"
+        onClick={() => editorStore.setPreviewIndex(state.previewIndex + 1)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          editorStore.setPreviewIndex(state.previewIndex - 1);
+        }}
+      >
         <div
           style={{
             width,
@@ -137,7 +141,7 @@ export function PreviewOverlay() {
 
       {showHint && (
         <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-black/40 px-4 py-1.5 text-[12px] text-white/80">
-          ← → 換頁　空白鍵下一頁　F 全螢幕　N 講者檢視　Esc 離開
+          點畫面下一頁　← → ↑ ↓ 換頁　F 全螢幕　N 講者檢視　Esc 離開
         </div>
       )}
 

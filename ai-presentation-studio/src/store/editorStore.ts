@@ -12,6 +12,14 @@ import { buildLayoutElements } from '../model/layouts';
 import { migratePresentationFonts } from '../model/migrate';
 import { replaceInPresentation, type SearchOptions } from '../model/search';
 import { resolveSlideSelection, type SlideSelectMode } from '../lib/slideSelection';
+import {
+  deleteDeck,
+  listDecks,
+  loadDeck,
+  upsertDeck,
+  type DeckSummary,
+} from '../lib/library';
+import { newPresentationId } from '../model/ids';
 import { newGroupId, nextTaskId } from '../model/ids';
 import { applyPatch, mergeCompletedPresentation, type MergeSummary } from '../model/patch';
 import type {
@@ -55,6 +63,7 @@ export type DialogState =
   | { kind: 'help' }
   | { kind: 'layout'; afterSlideId?: string }
   | { kind: 'find' }
+  | { kind: 'library' }
   | {
       kind: 'confirm';
       title: string;
@@ -287,6 +296,15 @@ class EditorStore {
         savedAt: new Date().toISOString(),
       };
       globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(payload));
+      // 同時存進簡報清單，讓一台電腦可以放多份簡報。
+      const storage = globalThis.localStorage;
+      if (storage && !upsertDeck(storage, this.state.presentation)) {
+        this.toast({
+          tone: 'warning',
+          title: '簡報清單存不下了',
+          detail: '瀏覽器空間已滿。請到「檔案 → 我的簡報」刪掉用不到的簡報。',
+        });
+      }
       this.set({ savedAt: payload.savedAt ?? null, dirty: false });
       return true;
     } catch (err) {
@@ -334,6 +352,8 @@ class EditorStore {
   }
 
   setEditingText(id: string | null): void {
+    // 離開編輯時一定要結束連續編輯，否則後續的修改會被併進同一個復原點。
+    if (id === null) this.endTransaction();
     this.set({ editingTextId: id });
   }
 
@@ -388,6 +408,7 @@ class EditorStore {
 
   selectSlide(slideId: string, mode: SlideSelectMode = 'replace'): void {
     if (!this.state.presentation.slides.some((s) => s.id === slideId)) return;
+    this.endTransaction();
     const allIds = this.state.presentation.slides.map((s) => s.id);
     const selectedSlideIds = resolveSlideSelection(
       allIds,
@@ -708,6 +729,7 @@ class EditorStore {
   }
 
   clearSelection(): void {
+    this.endTransaction();
     this.set({ selectedIds: [], editingTextId: null });
   }
 
@@ -1039,6 +1061,51 @@ class EditorStore {
     });
     this.syncHistoryFlags();
     this.save();
+  }
+
+  /** 目前這台電腦存了哪些簡報。 */
+  decks(): DeckSummary[] {
+    const storage = globalThis.localStorage;
+    return storage ? listDecks(storage) : [];
+  }
+
+  /** 開啟清單裡的另一份簡報。 */
+  openDeck(id: string): void {
+    const storage = globalThis.localStorage;
+    const found = storage ? loadDeck(storage, id) : null;
+    if (!found) {
+      this.toast({ tone: 'error', title: '找不到這份簡報' });
+      return;
+    }
+    this.save();
+    this.replacePresentation(found, { resetHistory: true });
+    this.toast({ tone: 'success', title: `已開啟「${found.metadata.title}」` });
+  }
+
+  /** 另存新檔：複製目前內容成為一份新的簡報，舊的留在清單裡。 */
+  saveAsNewDeck(title: string): void {
+    this.save();
+    const copy = structuredClone(this.state.presentation);
+    copy.metadata = {
+      ...copy.metadata,
+      id: newPresentationId(),
+      title: title.trim() || `${copy.metadata.title} 複本`,
+      createdAt: new Date().toISOString(),
+    };
+    this.replacePresentation(copy, { resetHistory: true });
+    this.save();
+    this.toast({ tone: 'success', title: `已另存為「${copy.metadata.title}」` });
+  }
+
+  /** 從清單刪除一份簡報。不會刪掉目前正在編輯的那一份。 */
+  removeDeck(id: string): void {
+    if (id === this.state.presentation.metadata.id) {
+      this.toast({ tone: 'warning', title: '不能刪除正在編輯的簡報' });
+      return;
+    }
+    const storage = globalThis.localStorage;
+    if (storage) deleteDeck(storage, id);
+    this.toast({ tone: 'info', title: '已從清單刪除' });
   }
 
   updateMetadata(props: Partial<Presentation['metadata']>): void {

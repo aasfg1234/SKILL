@@ -517,6 +517,109 @@ function LayoutDialog({ afterSlideId }: { afterSlideId?: string }) {
   );
 }
 
+function LibraryDialog() {
+  const state = useEditorState();
+  const decks = editorStore.decks();
+  const currentId = state.presentation.metadata.id;
+  const [name, setName] = useState('');
+
+  return (
+    <Modal
+      title="我的簡報"
+      subtitle="全部存在這台電腦的瀏覽器裡，不會上傳"
+      width={600}
+      footer={
+        <>
+          <input
+            className="field-input mr-auto max-w-[240px]"
+            placeholder="另存新檔的名稱"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <button
+            type="button"
+            className="tool-btn"
+            onClick={() => {
+              editorStore.saveAsNewDeck(name);
+              editorStore.closeDialog();
+            }}
+          >
+            <Icon name="copy" size={14} />
+            另存新檔
+          </button>
+          <button type="button" className="tool-btn" onClick={() => editorStore.closeDialog()}>
+            關閉
+          </button>
+        </>
+      }
+    >
+      {decks.length === 0 ? (
+        <p className="py-8 text-center text-[12px] text-ink-3">還沒有存過任何簡報。</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {decks.map((deck) => {
+            const current = deck.id === currentId;
+            return (
+              <li
+                key={deck.id}
+                className="flex items-center gap-2 rounded-lg border p-2.5"
+                style={{
+                  borderColor: current ? 'var(--color-brand)' : 'var(--color-line)',
+                  background: current ? 'var(--color-brand-soft)' : 'transparent',
+                }}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-bold">
+                    {deck.title}
+                    {current && <span className="ml-2 text-[11px] text-brand">編輯中</span>}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-ink-3">
+                    {deck.slideCount} 頁　·　{new Date(deck.updatedAt).toLocaleString('zh-TW')}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="tool-btn"
+                  disabled={current}
+                  onClick={() => {
+                    editorStore.openDeck(deck.id);
+                    editorStore.closeDialog();
+                  }}
+                >
+                  開啟
+                </button>
+                <button
+                  type="button"
+                  className="tool-btn px-2"
+                  disabled={current}
+                  title="從清單刪除"
+                  aria-label={`刪除「${deck.title}」`}
+                  style={{ color: 'var(--color-danger)' }}
+                  onClick={() =>
+                    editorStore.confirm({
+                      title: '刪除簡報',
+                      message: `確定要從清單刪除「${deck.title}」嗎？這個動作無法復原。`,
+                      confirmLabel: '刪除',
+                      danger: true,
+                      onConfirm: () => editorStore.removeDeck(deck.id),
+                    })
+                  }
+                >
+                  <Icon name="trash" size={14} />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="mt-3 text-[11px] leading-relaxed text-ink-3">
+        瀏覽器的空間有限（約 5～10 MB）。內嵌很多圖片時可能存不下，
+        建議把不常用的簡報「匯出 JSON」留存後，從這裡刪掉。
+      </p>
+    </Modal>
+  );
+}
+
 function FindDialog() {
   const state = useEditorState();
   const [query, setQuery] = useState('');
@@ -630,6 +733,8 @@ export function Dialogs() {
       return <HelpDialog />;
     case 'find':
       return <FindDialog />;
+    case 'library':
+      return <LibraryDialog />;
     case 'layout':
       return <LayoutDialog afterSlideId={dialog.afterSlideId} />;
     case 'confirm':

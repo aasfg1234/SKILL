@@ -129,6 +129,11 @@ export function TopBar() {
         label="檔案"
         items={[
           { label: '新增簡報', icon: 'file', onSelect: newPresentationFromBlank },
+          {
+            label: '我的簡報…',
+            icon: 'slides',
+            onSelect: () => editorStore.openDialog({ kind: 'library' }),
+          },
           { label: '開啟（匯入 JSON）', icon: 'upload', onSelect: () => void importJson() },
           { label: '儲存', icon: 'save', shortcut: 'Ctrl+S', onSelect: saveNow },
           { separator: true, label: 'sep1' },

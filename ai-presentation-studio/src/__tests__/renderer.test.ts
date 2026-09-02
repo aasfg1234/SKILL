@@ -34,8 +34,12 @@ describe('HTML Renderer', () => {
     expect(html).toContain('上一頁');
     expect(html).toContain('下一頁');
     expect(html).toContain('全螢幕');
-    expect(html).toContain("case 'ArrowRight'");
-    expect(html).toContain("case 'ArrowLeft'");
+    expect(html).toContain("'ArrowRight'");
+    expect(html).toContain("'ArrowLeft'");
+    // 上下鍵與點畫面換頁
+    expect(html).toContain("'ArrowDown'");
+    expect(html).toContain("'ArrowUp'");
+    expect(html).toContain("viewport.addEventListener('click'");
     expect(html).toContain('requestFullscreen');
     expect(html).toContain('exitFullscreen');
     expect(html).toContain('第 1 / 5 頁');

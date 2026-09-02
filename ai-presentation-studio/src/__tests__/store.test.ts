@@ -446,4 +446,36 @@ describe('編輯器 Store', () => {
 
     expect(editorStore.getState().presentation.slides[1].elements).toEqual([]);
   });
+
+  it('離開編輯狀態會結束連續編輯，之後每一次修改都是獨立的復原點', () => {
+    // 重現：雙擊表格會開始一段連續編輯，使用者用滑鼠點別處離開。
+    editorStore.beginTransaction();
+    editorStore.clearSelection();
+
+    editorStore.addElement(createRectElement({ id: 'first' }), 'slide-01');
+    editorStore.addElement(createRectElement({ id: 'second' }), 'slide-01');
+
+    const ids = () =>
+      editorStore.getState().presentation.slides[0].elements.map((el) => el.id);
+    editorStore.undo();
+
+    expect(ids()).not.toContain('second');
+    expect(ids()).toContain('first');
+  });
+
+  it('切換投影片也會結束連續編輯', () => {
+    editorStore.beginTransaction();
+    editorStore.selectSlide('slide-02');
+
+    editorStore.addElement(createRectElement({ id: 'later' }), 'slide-02');
+    editorStore.undo();
+
+    const slide = editorStore.getState().presentation.slides[1];
+    expect(slide.elements.map((el) => el.id)).not.toContain('later');
+    // 只退掉那一次新增，而且可以重做回來
+    editorStore.redo();
+    expect(
+      editorStore.getState().presentation.slides[1].elements.map((el) => el.id),
+    ).toContain('later');
+  });
 });

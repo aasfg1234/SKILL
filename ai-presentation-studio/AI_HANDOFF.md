@@ -10,11 +10,11 @@
 ## 最新 Session
 
 - AI：Claude
-- Session：008
+- Session：009
 - 日期：2026-09-02
 - 狀態：完成
 
-最新 Session 檔案：`AI_HISTORY/2026-09-02_008_Claude.md`
+最新 Session 檔案：`AI_HISTORY/2026-09-02_009_Claude.md`
 
 ---
 
@@ -22,7 +22,7 @@
 
 AI Presentation Studio 單機版 MVP 可用，核心流程全通。
 
-- 154 項測試全過，型別檢查無錯誤，正式建置成功
+- 177 項測試全過，型別檢查無錯誤，正式建置成功
 - `npm run build` 產出可離線雙擊的 `dist/AI-Presentation-Studio.html`
 - 已實作：畫布編輯、投影片列表與拖曳排序、屬性面板、AI 任務面板、播放模式、群組、對齊、均分、吸附、復原／重作
 - 已實作：右鍵選單、Ctrl+滾輪縮放、空白鍵平移畫布、破壞性動作確認對話框
@@ -30,6 +30,7 @@ AI Presentation Studio 單機版 MVP 可用，核心流程全通。
 - 已實作：表格（不含儲存格合併）、項目符號與編號、全簡報搜尋與取代、投影片多選
 - 已實作：跨系統安全字型選單。匯出的簡報在 Windows／macOS／iOS／Linux 版面一致（Android 除外）
 - 已實作：講者檢視。編輯器播放中按 N 開排練面板；匯出的簡報按 N 開獨立講者視窗
+- 已實作：多份簡報管理、圖層清單、表格欄寬拖曳、播放時點畫面換頁
 - 「模擬 AI 完成」可一次回填全部 AI 元件，回填位置正確
 - 完全不串接任何 AI API，這是第一版刻意的設計
 
@@ -38,7 +39,8 @@ Session 003 修完 3 個 Bug，Session 004 修完 10 項體驗問題，
 Session 005 做完版型範本與圖片拖放，
 Session 006 做完項目符號、搜尋取代、表格、投影片多選，
 Session 007 解決匯出後換系統跑版的問題，
-Session 008 做完講者檢視，並修好「備註沒有被匯出」的資料遺失。
+Session 008 做完講者檢視，並修好「備註沒有被匯出」的資料遺失，
+Session 009 修好復原被併步的錯誤，並補上多份簡報、圖層清單、表格欄寬、播放點畫面換頁。
 
 各項修法見 `AI_HISTORY/` 中對應的 Session 檔。
 
@@ -52,9 +54,9 @@ Session 002 第 7 節建議功能的其餘項目，清單見 `2026-09-02_005_Cla
 
 先問使用者。若無指示，建議順序：
 
-1. **請使用者在真正的瀏覽器測一次匯出檔的獨立講者視窗**。測試環境擋彈出式視窗，這條路徑尚未實機驗證
-2. **圖層列表面板**。元素種類變多了，需要清單管理
-3. **匯出 PDF**。PDF 本來就會內嵌字型，可以順便涵蓋 Android
+1. **請使用者在真正的瀏覽器測一次匯出檔的獨立講者視窗**。測試環境擋彈出式視窗，已累積兩個 Session 未實機驗證
+2. **匯出 PDF**。PDF 本來就會內嵌字型，可以順便涵蓋 Android
+3. **播放時隱藏未完成的 AI 元件**。工程量小，但會直接影響對外簡報的觀感
 
 （跨系統跑版問題已於 Session 007 用「拉丁字型優先」解決，不需要內嵌字型。
 唯一未涵蓋的是 Android，使用者目前選擇不做內嵌。）
@@ -89,9 +91,14 @@ Session 002 第 7 節建議功能的其餘項目，清單見 `2026-09-02_005_Cla
 22. **`dist/AI-Presentation-Studio.html` 是編輯器本身的單檔版，不是匯出的簡報。** 匯出的簡報是 `final-presentation.html`。不要搞混。
 23. **匯出檔的講者視窗靠主視窗直接寫入子視窗 DOM，不用任何訊息通道。** 不要改成 BroadcastChannel 或 localStorage 同步，那些在 `file://` 上不可靠。
 24. **計時器格式有兩份**：`model/presenter.ts` 的 `formatElapsed` 與 `renderHtml.ts` 裡手寫的 `elapsedText`。匯出檔不能 import TypeScript，所以必須這樣。改格式時兩邊都要改。
-25. **不要串接真的 AI API。** 第一版刻意不串。要改必須先問使用者。
-26. **不要動 `src/model/sanitize.ts` 的白名單清理。** 那是唯一的 XSS 防線。
-27. **完整的「已確定設計決策」清單在 `AI_PROTOCOL.md` 第十二節，以及 Session 003～008 的第 4 節。** 推翻任何一項之前，先讀它。
+25. **換頁按鍵對照也有兩份**：`model/presenter.ts` 的 `previewStepFromKey` 與 `renderHtml.ts` 的 `stepFromKey`。同上，兩邊都要改。
+26. **「結束連續編輯」統一在 `setEditingText(null)`／`clearSelection()`／`selectSlide()` 三個入口。** 不要改成在每個編輯欄位掛 `onBlur`，表格會變成每移動一格就切一個復原點。
+27. **多份簡報用 localStorage，容量約 5～10 MB。** `upsertDeck` 的回傳值一定要處理，存不下時要提示使用者。
+28. **`src/lib/layers.ts` 是 z-index 常數，`src/model/layerList.ts` 才是圖層清單。** 名字很像，不要弄混。
+29. **讀程式碼推論出來的症狀，一定要實際跑一次確認。** Session 008 與 009 各發生過一次判斷錯誤。
+30. **不要串接真的 AI API。** 第一版刻意不串。要改必須先問使用者。
+31. **不要動 `src/model/sanitize.ts` 的白名單清理。** 那是唯一的 XSS 防線。
+32. **完整的「已確定設計決策」清單在 `AI_PROTOCOL.md` 第十二節，以及 Session 003～009 的第 4 節。** 推翻任何一項之前，先讀它。
 
 ---
 

@@ -10,7 +10,7 @@ import {
   createTextElement,
 } from '../model/factory';
 import type { SlideElement, TableElement, TextElement } from '../model/types';
-import { setTableCell, tableCellRects } from '../model/table';
+import { resizeTableColumn, setTableCell, tableCellRects } from '../model/table';
 import { editorStore, useEditorState, type ToolId } from '../store/editorStore';
 import { pickImageFile } from '../lib/files';
 import {
@@ -309,6 +309,7 @@ export function Canvas() {
   const spaceHeld = useRef(false);
   const [dropping, setDropping] = useState(false);
   const pendingTableCell = useRef<{ row: number; col: number } | null>(null);
+  const colResize = useRef<{ table: TableElement; at: number; startX: number } | null>(null);
 
   const zoom = state.zoom;
 
@@ -613,6 +614,33 @@ export function Canvas() {
     e.preventDefault();
     setDropping(false);
     void insertImageFile(file, toStage(e.clientX, e.clientY));
+  };
+
+  /** 拖曳表格的欄線調整欄寬。 */
+  const onColumnResizeDown = (e: React.PointerEvent, table: TableElement, at: number) => {
+    e.stopPropagation();
+    if (table.locked) return;
+    colResize.current = { table, at, startX: toStage(e.clientX, e.clientY).x };
+    editorStore.beginTransaction();
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+  };
+
+  const onColumnResizeMove = (e: React.PointerEvent) => {
+    const current = colResize.current;
+    if (!current) return;
+    const delta = (toStage(e.clientX, e.clientY).x - current.startX) / current.table.width;
+    const next = resizeTableColumn(current.table, current.at, delta);
+    editorStore.updateElement(
+      current.table.id,
+      { columnWidths: next.columnWidths },
+      { transient: true },
+    );
+  };
+
+  const onColumnResizeUp = () => {
+    if (!colResize.current) return;
+    colResize.current = null;
+    editorStore.endTransaction();
   };
 
   const openContextMenu = (e: React.MouseEvent, element?: SlideElement) => {
@@ -1400,6 +1428,38 @@ export function Canvas() {
               }}
             />
           ))}
+
+          {/* 表格的欄線：拖曳可調整欄寬 */}
+          {single?.type === 'table' &&
+            !single.locked &&
+            !editingTable &&
+            single.columnWidths.slice(0, -1).map((_, at) => {
+              const left =
+                single.x +
+                single.columnWidths.slice(0, at + 1).reduce((sum, w) => sum + w, 0) *
+                  single.width;
+              return (
+                <div
+                  key={`col-${at}`}
+                  role="separator"
+                  aria-label={`調整第 ${at + 1} 欄的寬度`}
+                  onPointerDown={(e) => onColumnResizeDown(e, single, at)}
+                  onPointerMove={onColumnResizeMove}
+                  onPointerUp={onColumnResizeUp}
+                  onPointerCancel={onColumnResizeUp}
+                  style={{
+                    position: 'absolute',
+                    left: left - 5 / zoom,
+                    top: single.y,
+                    width: 10 / zoom,
+                    height: single.height,
+                    cursor: 'col-resize',
+                    background: 'transparent',
+                    zIndex: LAYER.canvasOverlay,
+                  }}
+                />
+              );
+            })}
 
           {/* 選取或編輯文字時都就近顯示常用工具，不用一直移到右側面板 */}
           {single?.type === 'text' && !single.locked && (

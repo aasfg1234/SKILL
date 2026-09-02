@@ -281,11 +281,19 @@ function navigationScript(total: number): string {
     else if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen(); }
   }
 
+  // 換頁按鍵對照，與編輯器的 previewStepFromKey 保持一致
+  function stepFromKey(key){
+    if (key === 'ArrowRight' || key === 'ArrowDown' || key === 'PageDown' ||
+        key === ' ' || key === 'Spacebar' || key === 'Enter') return 1;
+    if (key === 'ArrowLeft' || key === 'ArrowUp' || key === 'PageUp' ||
+        key === 'Backspace') return -1;
+    return 0;
+  }
+
   function handleKey(e){
+    var step = stepFromKey(e.key);
+    if (step !== 0) { go(index + step); e.preventDefault(); return; }
     switch (e.key) {
-      case 'ArrowRight': case 'PageDown': go(index + 1); e.preventDefault(); break;
-      case ' ': case 'Spacebar': go(index + 1); e.preventDefault(); break;
-      case 'ArrowLeft': case 'PageUp': go(index - 1); e.preventDefault(); break;
       case 'Home': go(0); e.preventDefault(); break;
       case 'End': go(total - 1); e.preventDefault(); break;
       case 'f': case 'F': toggleFullscreen(); e.preventDefault(); break;
@@ -308,6 +316,14 @@ function navigationScript(total: number): string {
   if (full) full.addEventListener('click', toggleFullscreen);
   var presenterBtn = document.getElementById('aps-presenter');
   if (presenterBtn) presenterBtn.addEventListener('click', togglePresenter);
+
+  // 點畫面往下一頁，右鍵往上一頁；點控制列或講者面板不算。
+  var viewport = document.getElementById('aps-viewport');
+  if (viewport) {
+    viewport.addEventListener('click', function(){ go(index + 1); });
+    viewport.addEventListener('contextmenu', function(e){ e.preventDefault(); go(index - 1); });
+    viewport.style.cursor = 'pointer';
+  }
 
   window.addEventListener('resize', fit);
   window.addEventListener('hashchange', function(){ go(hashIndex()); });
@@ -352,7 +368,7 @@ export function renderPresentationToHtml(
     <div id="aps-counter">第 1 / ${presentation.slides.length} 頁</div>
   </div>
   <div id="aps-progress"></div>
-  <div id="aps-hint">← → 換頁　空白鍵下一頁　F 全螢幕　N 講者檢視　Esc 離開全螢幕</div>
+  <div id="aps-hint">點畫面下一頁　← → ↑ ↓ 換頁　F 全螢幕　N 講者檢視　Esc 離開全螢幕</div>
   <aside id="aps-presenter-inline" hidden>
     <div class="aps-p-head">
       <strong>講者檢視</strong>
