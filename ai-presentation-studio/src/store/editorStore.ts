@@ -29,6 +29,9 @@ import { newPresentationId } from '../model/ids';
 import { newGroupId, nextTaskId } from '../model/ids';
 import { applyPatch, mergeCompletedPresentation, type MergeSummary } from '../model/patch';
 import { masterKindForSlide } from '../model/master';
+import { prepareSlidesForAppend } from '../ai/apply';
+import { rekeySingleSlide } from '../ai/singleSlide';
+import type { GeneratedDeckAction, SingleSlideContext } from '../ai/types';
 import type {
   MasterKind,
   Presentation,
@@ -74,6 +77,8 @@ export type DialogState =
   | { kind: 'layout'; afterSlideId?: string }
   | { kind: 'find' }
   | { kind: 'library' }
+  | { kind: 'full-ai' }
+  | { kind: 'single-ai' }
   | {
       kind: 'confirm';
       title: string;
@@ -1347,6 +1352,47 @@ class EditorStore {
     this.syncHistoryFlags();
     this.scheduleSave();
     return result.summary;
+  }
+
+  /** 套用全 AI 生成結果。每種做法都只建立一個復原點。 */
+  applyGeneratedPresentation(generated: Presentation, action: GeneratedDeckAction): void {
+    if (action === 'append') {
+      const slides = prepareSlidesForAppend(this.state.presentation, generated);
+      const firstId = slides[0]?.id ?? this.state.currentSlideId;
+      this.commit((draft) => {
+        draft.slides.push(...slides);
+      });
+      this.set({
+        masterMode: null,
+        currentSlideId: firstId,
+        selectedSlideIds: firstId ? [firstId] : [],
+        selectedIds: [],
+        editingTextId: null,
+      });
+      return;
+    }
+
+    if (action === 'new') this.save();
+    this.replacePresentation(generated);
+  }
+
+  /** 把預覽的 AI 單頁插到原本錨點後面，只建立一個復原點。 */
+  insertGeneratedSlide(slide: Slide, context: SingleSlideContext): boolean {
+    if (this.state.presentation.metadata.id !== context.presentationId) {
+      this.toast({ tone: 'error', title: '目前簡報已更換', detail: '請關閉視窗，再從新的位置生成單頁。' });
+      return false;
+    }
+    const anchorIndex = this.state.presentation.slides.findIndex((item) => item.id === context.insertAfterSlideId);
+    if (anchorIndex < 0) {
+      this.toast({ tone: 'error', title: '原本的投影片已刪除', detail: '請關閉視窗，重新選擇插入位置。' });
+      return false;
+    }
+    const inserted = rekeySingleSlide(slide);
+    this.commit((draft) => {
+      draft.slides.splice(anchorIndex + 1, 0, inserted);
+    });
+    this.set({ masterMode: null, currentSlideId: inserted.id, selectedSlideIds: [inserted.id], selectedIds: [], editingTextId: null, tool: 'select' });
+    return true;
   }
 
   resetToDemo(): void {

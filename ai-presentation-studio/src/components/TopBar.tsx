@@ -318,6 +318,11 @@ export function TopBar() {
         ]}
       />
 
+      <button type="button" className="tool-btn" onClick={() => editorStore.openDialog({ kind: 'full-ai' })}>
+        <Icon name="sparkles" size={15} />
+        全 AI 生成
+      </button>
+
       <button type="button" className="tool-btn" onClick={() => editorStore.enterPreview()}>
         <Icon name="play" size={15} />
         預覽

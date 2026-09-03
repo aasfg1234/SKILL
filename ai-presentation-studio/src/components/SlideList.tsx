@@ -426,7 +426,7 @@ export function SlideList({ collapsed, onToggle }: { collapsed: boolean; onToggl
         })}
       </div>
 
-      <div className="border-t px-3 py-2" style={{ borderColor: 'var(--color-line)' }}>
+      <div className="space-y-1.5 border-t px-3 py-2" style={{ borderColor: 'var(--color-line)' }}>
         <button
           type="button"
           className="tool-btn w-full justify-center"
@@ -436,7 +436,16 @@ export function SlideList({ collapsed, onToggle }: { collapsed: boolean; onToggl
           }
         >
           <Icon name="plus" size={14} />
-          新增投影片
+          新增一般投影片
+        </button>
+        <button
+          type="button"
+          className="tool-btn w-full justify-center"
+          style={{ background: 'var(--color-brand-soft)', border: '1px solid var(--color-line)', color: 'var(--color-brand)' }}
+          onClick={() => editorStore.openDialog({ kind: 'single-ai' })}
+        >
+          <span aria-hidden="true">✨</span>
+          AI 生成單頁
         </button>
       </div>
     </aside>

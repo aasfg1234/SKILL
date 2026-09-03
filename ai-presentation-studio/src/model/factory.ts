@@ -225,6 +225,8 @@ export function createLineElement(init: BaseInit & Partial<LineElement> = {}): L
     type: 'line',
     stroke: init.stroke ?? '#111827',
     strokeWidth: init.strokeWidth ?? 4,
+    arrowStart: init.arrowStart ?? false,
+    arrowEnd: init.arrowEnd ?? false,
   };
 }
 
