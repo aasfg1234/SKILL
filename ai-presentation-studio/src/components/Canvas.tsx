@@ -17,6 +17,7 @@ import {
   mergeCovering,
   resizeTableColumn,
   setTableCell,
+  parsePastedTable,
   tableCellRects,
   unmergeCells,
 } from '../model/table';
@@ -29,6 +30,7 @@ import { pickImageFile } from '../lib/files';
 import {
   fitImageIntoSlide,
   measureImage,
+  pickImageFromClipboard,
   pickImageFromFiles,
   readImageAsDataUrl,
 } from '../lib/images';
@@ -657,18 +659,54 @@ export function Canvas() {
     [width, height],
   );
 
-  // 從系統剪貼簿貼上圖片（截圖後直接 Ctrl+V）。
+  /** 把從試算表貼來的資料放成一個表格。 */
+  const insertPastedTable = useCallback(
+    (rows: string[][]) => {
+      const columns = rows[0]?.length ?? 1;
+      const size = {
+        width: Math.min(Math.round(width * 0.86), Math.max(480, columns * 260)),
+        height: Math.min(Math.round(height * 0.7), Math.max(160, rows.length * 90)),
+      };
+      const placed = fitRectToCanvas(
+        { x: (width - size.width) / 2, y: (height - size.height) / 2, ...size },
+        width,
+        height,
+      );
+      editorStore.addElement(createTableElement({ ...placed, cells: rows }));
+      editorStore.toast({
+        tone: 'success',
+        title: `已貼上表格`,
+        detail: `${rows.length} 列 × ${columns} 欄`,
+      });
+    },
+    [width, height],
+  );
+
+  // 從系統剪貼簿貼上：截圖直接 Ctrl+V，或從試算表複製一段資料變成表格。
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
+      if (e.defaultPrevented) return;
       if (editorStore.getState().editingTextId) return;
-      const file = pickImageFromFiles(e.clipboardData?.files ?? null);
-      if (!file) return;
+      // 焦點在輸入框裡（例如圖表的貼上欄位）時，交給那個欄位自己處理，
+      // 不然貼一次會同時做兩件事。
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+
+      const file = pickImageFromClipboard(e.clipboardData);
+      if (file) {
+        e.preventDefault();
+        void insertImageFile(file);
+        return;
+      }
+
+      const rows = parsePastedTable(e.clipboardData?.getData('text/plain') ?? '');
+      if (!rows) return;
       e.preventDefault();
-      void insertImageFile(file);
+      insertPastedTable(rows);
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, [insertImageFile]);
+  }, [insertImageFile, insertPastedTable]);
 
   const onDragOver = (e: React.DragEvent) => {
     if (!Array.from(e.dataTransfer.types ?? []).includes('Files')) return;

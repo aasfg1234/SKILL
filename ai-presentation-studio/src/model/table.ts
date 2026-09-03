@@ -10,6 +10,36 @@ import type { TableElement, TableMerge } from './types';
  * 不會單獨顯示，也不會出現在 `tableCellRects` 的結果裡。
  */
 
+/** 一次貼上最多接受幾列、幾欄，超過就截斷，避免整個編輯器卡住。 */
+export const MAX_PASTE_ROWS = 50;
+export const MAX_PASTE_COLUMNS = 20;
+
+/**
+ * 把從試算表複製來的文字拆成表格。
+ *
+ * Excel、Google 試算表複製出來的純文字，欄之間是 Tab、列之間是換行。
+ * 沒有 Tab 就代表使用者複製的是普通文字，不要硬轉成表格。
+ */
+export function parsePastedTable(text: string): string[][] | null {
+  const raw = String(text ?? '').replace(/\r\n?/g, '\n');
+  if (!raw.trim()) return null;
+  if (!raw.includes('\t')) return null;
+
+  const lines = raw.split('\n');
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+  if (lines.length === 0) return null;
+
+  const rows = lines.slice(0, MAX_PASTE_ROWS).map((line) => line.split('\t').slice(0, MAX_PASTE_COLUMNS));
+  const columns = rows.reduce((most, row) => Math.max(most, row.length), 0);
+  if (columns < 2) return null;
+
+  return rows.map((row) => {
+    const next = [...row];
+    while (next.length < columns) next.push('');
+    return next;
+  });
+}
+
 export interface TableCellRect {
   row: number;
   col: number;

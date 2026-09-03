@@ -27,6 +27,38 @@ export function pickImageFromFiles(files: ArrayLike<File> | File[] | null): File
   );
 }
 
+interface ClipboardItemLike {
+  kind: string;
+  type: string;
+  getAsFile(): File | null;
+}
+
+interface ClipboardLike {
+  files?: ArrayLike<File> | null;
+  items?: ArrayLike<ClipboardItemLike> | null;
+}
+
+/**
+ * 從剪貼簿挑出圖片。
+ *
+ * 截圖之後直接貼上時，有些瀏覽器只把圖片放在 `items` 裡、`files` 是空的，
+ * 所以兩邊都要看，使用者才不必先另存新檔。
+ */
+export function pickImageFromClipboard(data: ClipboardLike | null | undefined): File | null {
+  if (!data) return null;
+
+  const fromFiles = pickImageFromFiles(data.files ?? null);
+  if (fromFiles) return fromFiles;
+
+  for (const item of Array.from(data.items ?? [])) {
+    if (item?.kind !== 'file') continue;
+    if (typeof item.type !== 'string' || !item.type.startsWith('image/')) continue;
+    const file = item.getAsFile();
+    if (file) return file;
+  }
+  return null;
+}
+
 /** 讀成 data URL，讓簡報保持單一檔案、不依賴外部路徑。 */
 export function readImageAsDataUrl(file: File): Promise<string | null> {
   return new Promise((resolve) => {
