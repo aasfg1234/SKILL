@@ -160,7 +160,15 @@ export function ElementView({ el, mode }: { el: SlideElement; mode: ViewMode }) 
           {normalizeListStyle(el.listStyle) === 'none'
             ? formatListLines(el.text, 'none').map((line, index) => (
                 <div key={index} style={{ paddingLeft: `${line.level * 1.6}em` }}>
-                  {line.text || ' '}
+                  <span
+                    data-aps-text={mode === 'edit' ? '1' : undefined}
+                    style={{
+                      pointerEvents: mode === 'edit' ? 'auto' : undefined,
+                      cursor: mode === 'edit' ? 'text' : undefined,
+                    }}
+                  >
+                    {line.text || ' '}
+                  </span>
                 </div>
               ))
             : formatListLines(el.text, el.listStyle).map((line, index) => (
@@ -182,7 +190,16 @@ export function ElementView({ el, mode }: { el: SlideElement; mode: ViewMode }) 
                   {line.marker && (
                     <span style={{ flex: '0 0 auto', opacity: 0.75 }}>{line.marker}</span>
                   )}
-                  <span style={{ flex: '0 1 auto' }}>{line.text || ' '}</span>
+                  <span
+                    data-aps-text={mode === 'edit' ? '1' : undefined}
+                    style={{
+                      flex: '0 1 auto',
+                      pointerEvents: mode === 'edit' ? 'auto' : undefined,
+                      cursor: mode === 'edit' ? 'text' : undefined,
+                    }}
+                  >
+                    {line.text || ' '}
+                  </span>
                 </div>
               ))}
         </div>

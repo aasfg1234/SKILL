@@ -1317,6 +1317,8 @@ export function Canvas() {
                 if (state.tool !== 'select' || state.editingTextId === el.id) return;
                 // 加選與群組維持原本行為：加選要保留選取，群組要雙擊才進去。
                 if (e.shiftKey || e.ctrlKey || e.metaKey || el.groupId) return;
+                // 只有點在文字本身才進入編輯；點方塊的空白處只是選取。
+                if (!(e.target as HTMLElement).closest?.('[data-aps-text]')) return;
                 const start = clickStart.current;
                 clickStart.current = null;
                 if (!start || start.id !== el.id) return;
@@ -1362,12 +1364,14 @@ export function Canvas() {
                   width: el.width,
                   height: el.height,
                   pointerEvents: state.tool === 'select' && !el.hidden ? 'auto' : 'none',
-                  cursor: el.locked ? 'not-allowed' : el.type === 'text' ? 'text' : 'move',
+                  cursor: el.locked ? 'not-allowed' : 'move',
                 }}
               />
-              <div style={{ pointerEvents: 'none' }}>
-                <ElementView el={el} mode="edit" />
-              </div>
+              {!(el.type === 'text' && state.editingTextId === el.id) && (
+                <div style={{ pointerEvents: 'none' }}>
+                  <ElementView el={el} mode="edit" />
+                </div>
+              )}
             </div>
           ))}
 
@@ -1875,14 +1879,40 @@ export function Canvas() {
 
           {/* 文字直接編輯 */}
           {editing && (
+            // 外層只負責定位與垂直對齊，讓編輯中的文字停在原本的位置。
             <div
-              ref={editableRef}
-              contentEditable
-              suppressContentEditableWarning
-              role="textbox"
-              aria-label="直接編輯文字"
-              aria-multiline="true"
-              data-placeholder="輸入文字"
+              // 不擋住的話，拖曳選字會傳到畫布變成框選，編輯也會被中斷。
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerMove={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              style={{
+                position: 'absolute',
+                left: editing.x,
+                top: editing.y,
+                width: editing.width,
+                height: editing.height,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent:
+                  editing.verticalAlign === 'top'
+                    ? 'flex-start'
+                    : editing.verticalAlign === 'bottom'
+                      ? 'flex-end'
+                      : 'center',
+                background: 'rgba(255,255,255,.92)',
+                outline: `${2 / zoom}px solid var(--color-brand)`,
+                overflow: 'hidden',
+                zIndex: LAYER.canvasOverlay,
+              }}
+            >
+              <div
+                ref={editableRef}
+                contentEditable
+                suppressContentEditableWarning
+                role="textbox"
+                aria-label="直接編輯文字"
+                aria-multiline="true"
+                data-placeholder="輸入文字"
               onInput={(e) => {
                 const text = e.currentTarget.innerText.replace(/\r\n?/g, '\n');
                 const grown = growTextHeight(editing, e.currentTarget.scrollHeight, height);
@@ -1928,30 +1958,24 @@ export function Canvas() {
                   );
                 }
               }}
-              style={{
-                position: 'absolute',
-                left: editing.x,
-                top: editing.y,
-                width: editing.width,
-                height: editing.height,
-                fontSize: editing.fontSize,
-                fontWeight: editing.bold ? 700 : 400,
-                fontStyle: editing.italic ? 'italic' : 'normal',
-                textAlign: editing.align,
-                color: editing.color,
-                lineHeight: editing.lineHeight,
-                letterSpacing: editing.letterSpacing,
-                background: 'rgba(255,255,255,.92)',
-                border: `${2 / zoom}px solid var(--color-brand)`,
-                outline: 'none',
-                resize: 'none',
-                padding: 0,
-                fontFamily: editing.fontFamily,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                overflow: 'hidden',
-              }}
-            />
+                style={{
+                  width: '100%',
+                  fontSize: editing.fontSize,
+                  fontWeight: editing.bold ? 700 : 400,
+                  fontStyle: editing.italic ? 'italic' : 'normal',
+                  textAlign: editing.align,
+                  color: editing.color,
+                  lineHeight: editing.lineHeight,
+                  letterSpacing: editing.letterSpacing,
+                  background: 'transparent',
+                  outline: 'none',
+                  padding: 0,
+                  fontFamily: editing.fontFamily,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              />
+            </div>
           )}
         </div>
       </div>
