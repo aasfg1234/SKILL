@@ -272,6 +272,17 @@ export function TopBar() {
         ]}
       />
 
+      <button
+        type="button"
+        className="tool-btn"
+        data-active={state.masterMode}
+        title={state.masterMode ? '返回一般投影片' : '編輯所有投影片共用的母片'}
+        onClick={() => state.masterMode ? editorStore.exitMasterMode() : editorStore.enterMasterMode()}
+      >
+        <Icon name="grid" size={15} />
+        {state.masterMode ? '返回投影片' : '母片設計'}
+      </button>
+
       <Menu
         label="✨ AI"
         items={[

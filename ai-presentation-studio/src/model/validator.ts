@@ -74,7 +74,13 @@ export function validatePresentation(presentation: Presentation): ValidationRepo
   const elementSlide = new Map<string, string>();
   const aiElementTaskIds = new Map<string, { slideId: string; elementId: string }>();
 
-  for (const slide of slides) {
+  const masterSurfaces = presentation.masters
+    ? [presentation.masters.cover, presentation.masters.content]
+    : presentation.master
+      ? [presentation.master]
+      : [];
+  const surfaces = [...masterSurfaces, ...slides];
+  for (const slide of surfaces) {
     if (!slide.id) {
       issues.push({
         code: 'MISSING_SLIDE_ID',

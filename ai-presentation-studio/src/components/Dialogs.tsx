@@ -440,6 +440,8 @@ const SHORTCUTS: Array<[string, string]> = [
   ['Ctrl + Shift + G', '取消群組'],
   ['Ctrl + 0', '符合視窗'],
   ['Ctrl + 滾輪', '縮放畫布'],
+  ['滾輪', '切換投影片'],
+  ['方向鍵', '未選取元件時切換投影片'],
   ['Delete / Backspace', '刪除選取元素'],
   ['← ↑ ↓ →', '移動元素 1px'],
   ['Shift + 方向鍵', '移動元素 10px'],

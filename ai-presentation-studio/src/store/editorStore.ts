@@ -22,7 +22,9 @@ import {
 import { newPresentationId } from '../model/ids';
 import { newGroupId, nextTaskId } from '../model/ids';
 import { applyPatch, mergeCompletedPresentation, type MergeSummary } from '../model/patch';
+import { masterKindForSlide } from '../model/master';
 import type {
+  MasterKind,
   Presentation,
   PresentationPatch,
   Slide,
@@ -90,6 +92,8 @@ export interface EditorState {
   showGuides: boolean;
   uiTheme: 'light' | 'dark';
   editingTextId: string | null;
+  /** 有值時，畫布正在編輯指定的母片。 */
+  masterMode: MasterKind | null;
   previewMode: boolean;
   previewIndex: number;
   toasts: ToastMessage[];
@@ -144,6 +148,7 @@ function initialState(): EditorState {
     showGuides: true,
     uiTheme: 'light',
     editingTextId: null,
+    masterMode: null,
     previewMode: false,
     previewIndex: 0,
     toasts: [],
@@ -163,6 +168,18 @@ class EditorStore {
   private txBase: Presentation | null = null;
   private clipboard: SlideElement[] = [];
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private editingSlide(presentation: Presentation = this.state.presentation): Slide | undefined {
+    return this.state.masterMode
+      ? presentation.masters?.[this.state.masterMode]
+      : presentation.slides.find((slide) => slide.id === this.state.currentSlideId);
+  }
+
+  private elementSurfaces(presentation: Presentation): Slide[] {
+    return presentation.masters
+      ? [presentation.masters.cover, presentation.masters.content, ...presentation.slides]
+      : presentation.slides;
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -272,12 +289,13 @@ class EditorStore {
 
   private ensureValidSelection(): void {
     const { presentation, currentSlideId, selectedIds } = this.state;
-    const slide =
-      presentation.slides.find((s) => s.id === currentSlideId) ?? presentation.slides[0];
+    const slide = this.state.masterMode
+      ? presentation.masters?.[this.state.masterMode]
+      : presentation.slides.find((s) => s.id === currentSlideId) ?? presentation.slides[0];
     const ids = new Set(slide?.elements.map((el) => el.id) ?? []);
     this.set({
-      currentSlideId: slide?.id ?? '',
-      selectedSlideIds: slide ? [slide.id] : [],
+      currentSlideId: this.state.masterMode ? currentSlideId : slide?.id ?? '',
+      selectedSlideIds: this.state.masterMode ? [] : slide ? [slide.id] : [],
       selectedIds: selectedIds.filter((id) => ids.has(id)),
       editingTextId: null,
     });
@@ -365,6 +383,22 @@ class EditorStore {
     this.set({ editingTextId: id });
   }
 
+  enterMasterMode(kind: MasterKind = 'content'): void {
+    this.endTransaction();
+    this.set({ masterMode: kind, selectedSlideIds: [], selectedIds: [], editingTextId: null, tool: 'select' });
+  }
+
+  exitMasterMode(): void {
+    this.endTransaction();
+    this.set({
+      masterMode: null,
+      selectedSlideIds: this.state.currentSlideId ? [this.state.currentSlideId] : [],
+      selectedIds: [],
+      editingTextId: null,
+      tool: 'select',
+    });
+  }
+
   enterPreview(index?: number): void {
     const idx =
       index ??
@@ -411,7 +445,7 @@ class EditorStore {
   /* ---------------------------------------------------------------- */
 
   get currentSlide(): Slide | undefined {
-    return this.state.presentation.slides.find((s) => s.id === this.state.currentSlideId);
+    return this.editingSlide();
   }
 
   selectSlide(slideId: string, mode: SlideSelectMode = 'replace'): void {
@@ -425,6 +459,7 @@ class EditorStore {
       mode,
     );
     this.set({
+      masterMode: null,
       currentSlideId: selectedSlideIds.includes(slideId)
         ? slideId
         : (selectedSlideIds[0] ?? slideId),
@@ -432,6 +467,17 @@ class EditorStore {
       selectedIds: [],
       editingTextId: null,
     });
+  }
+
+  /** 切到相鄰投影片。到達第一張或最後一張時不循環。 */
+  navigateSlide(direction: -1 | 1): boolean {
+    if (this.state.masterMode) return false;
+    const slides = this.state.presentation.slides;
+    const currentIndex = slides.findIndex((slide) => slide.id === this.state.currentSlideId);
+    const target = slides[currentIndex + direction];
+    if (!target) return false;
+    this.selectSlide(target.id);
+    return true;
   }
 
   /** 刪除目前選取的所有投影片；至少保留一張。 */
@@ -521,7 +567,7 @@ class EditorStore {
           accent: this.state.presentation.theme.palette.primary,
         })
       : [];
-    const slide = createSlide({ title: `投影片 ${index + 1}`, elements });
+    const slide = createSlide({ title: `投影片 ${index + 1}`, masterKind: 'content', elements });
     this.commit((draft) => {
       draft.slides.splice(index, 0, slide);
     });
@@ -626,6 +672,29 @@ class EditorStore {
     });
   }
 
+  updateMaster(props: Partial<Slide>): void {
+    const kind = this.state.masterMode;
+    if (!kind) return;
+    this.commit((draft) => {
+      if (!draft.masters) return;
+      Object.assign(draft.masters[kind], props);
+    });
+  }
+
+  applyMasterBackgroundToAllSlides(): void {
+    const kind = this.state.masterMode;
+    if (!kind) return;
+    this.commit((draft) => {
+      draft.slides.forEach((slide, index) => {
+        if (masterKindForSlide(slide, index) === kind) slide.useMasterBackground = true;
+      });
+    });
+    this.toast({
+      tone: 'success',
+      title: `${kind === 'cover' ? '封面' : '內容'}投影片已使用母片背景`,
+    });
+  }
+
   /* ---------------------------------------------------------------- */
   /* 元素                                                              */
   /* ---------------------------------------------------------------- */
@@ -686,7 +755,7 @@ class EditorStore {
     while (usedNames.has(`群組 ${groupNumber}`)) groupNumber += 1;
     const groupName = `群組 ${groupNumber}`;
     this.commit((draft) => {
-      const slide = draft.slides.find((item) => item.id === this.state.currentSlideId);
+      const slide = this.editingSlide(draft);
       if (!slide) return;
       for (const el of slide.elements) {
         if (ids.has(el.id)) {
@@ -708,7 +777,7 @@ class EditorStore {
       return;
     }
     this.commit((draft) => {
-      const slide = draft.slides.find((item) => item.id === this.state.currentSlideId);
+      const slide = this.editingSlide(draft);
       if (!slide) return;
       for (const el of slide.elements) {
         if (el.groupId && groupIds.has(el.groupId)) {
@@ -726,7 +795,7 @@ class EditorStore {
     options: { transient?: boolean } = {},
   ): void {
     const recipe = (draft: Presentation) => {
-      const slide = draft.slides.find((item) => item.id === this.state.currentSlideId);
+      const slide = this.editingSlide(draft);
       if (!slide) return;
       for (const el of slide.elements) {
         if (el.groupId === groupId) el.groupName = name;
@@ -741,14 +810,21 @@ class EditorStore {
     this.set({ selectedIds: [], editingTextId: null });
   }
 
-  addElement(element: SlideElement, slideId = this.state.currentSlideId): void {
+  addElement(element: SlideElement, slideId?: string): void {
+    if (this.state.masterMode && element.type === 'ai_component') {
+      this.toast({ tone: 'warning', title: '母片不能加入 AI 元件' });
+      return;
+    }
     this.commit((draft) => {
-      const index = draft.slides.findIndex((s) => s.id === slideId);
-      if (index < 0) return;
-      draft.slides[index] = addElementToSlide(draft.slides[index], {
+      const target = slideId
+        ? draft.slides.find((slide) => slide.id === slideId)
+        : this.editingSlide(draft);
+      if (!target) return;
+      const next = addElementToSlide(target, {
         ...element,
-        z: element.z || topZ(draft.slides[index]),
+        z: element.z || topZ(target),
       });
+      Object.assign(target, next);
     });
     // 鎖定工具時留在原本的工具，方便連續畫多個元素。
     this.set({
@@ -763,7 +839,7 @@ class EditorStore {
     options: { transient?: boolean } = {},
   ): void {
     const recipe = (draft: Presentation) => {
-      for (const slide of draft.slides) {
+      for (const slide of this.elementSurfaces(draft)) {
         const el = slide.elements.find((e) => e.id === elementId);
         if (!el) continue;
         Object.assign(el, props);
@@ -777,7 +853,7 @@ class EditorStore {
   updateSelected(props: Record<string, unknown>, options: { transient?: boolean } = {}): void {
     const ids = new Set(this.state.selectedIds);
     const recipe = (draft: Presentation) => {
-      for (const slide of draft.slides) {
+      for (const slide of this.elementSurfaces(draft)) {
         for (const el of slide.elements) {
           if (ids.has(el.id) && !el.locked) Object.assign(el, props);
         }
@@ -795,7 +871,7 @@ class EditorStore {
       this.toast({ tone: 'warning', title: '有元素已鎖定，無法刪除' });
     }
     this.commit((draft) => {
-      for (const slide of draft.slides) {
+      for (const slide of this.elementSurfaces(draft)) {
         slide.elements = slide.elements.filter((el) => !ids.has(el.id) || el.locked);
       }
     });
@@ -807,7 +883,7 @@ class EditorStore {
     if (source.length === 0) return;
     const copies = this.cloneElementsAsSet(source);
     this.commit((draft) => {
-      const slide = draft.slides.find((s) => s.id === this.state.currentSlideId);
+      const slide = this.editingSlide(draft);
       if (!slide) return;
       let z = topZ(slide);
       for (const copy of copies) {
@@ -831,9 +907,19 @@ class EditorStore {
 
   paste(): void {
     if (this.clipboard.length === 0) return;
-    const copies = this.cloneElementsAsSet(this.clipboard);
+    const source = this.state.masterMode
+      ? this.clipboard.filter((element) => element.type !== 'ai_component')
+      : this.clipboard;
+    if (source.length === 0) {
+      this.toast({ tone: 'warning', title: '母片不能貼上 AI 元件' });
+      return;
+    }
+    if (source.length !== this.clipboard.length) {
+      this.toast({ tone: 'warning', title: '已略過不能放在母片的 AI 元件' });
+    }
+    const copies = this.cloneElementsAsSet(source);
     this.commit((draft) => {
-      const slide = draft.slides.find((s) => s.id === this.state.currentSlideId);
+      const slide = this.editingSlide(draft);
       if (!slide) return;
       let z = topZ(slide);
       for (const copy of copies) slide.elements.push({ ...copy, z: z++ });
@@ -894,7 +980,7 @@ class EditorStore {
     const ids = new Set(this.state.selectedIds);
     if (ids.size === 0) return;
     this.commit((draft) => {
-      for (const slide of draft.slides) {
+      for (const slide of this.elementSurfaces(draft)) {
         for (const el of slide.elements) {
           if (!ids.has(el.id) || el.locked) continue;
           el.x = Math.round(el.x + dx);
@@ -908,7 +994,7 @@ class EditorStore {
     const ids = new Set(this.state.selectedIds);
     if (ids.size === 0) return;
     this.commit((draft) => {
-      const slide = draft.slides.find((s) => s.id === this.state.currentSlideId);
+      const slide = this.editingSlide(draft);
       if (!slide) return;
       const sorted = [...slide.elements].sort((a, b) => a.z - b.z);
       const targets = sorted.filter((el) => ids.has(el.id));
@@ -953,7 +1039,7 @@ class EditorStore {
     const maxY = Math.max(...selected.map((el) => el.y + el.height));
 
     this.commit((draft) => {
-      for (const slide of draft.slides) {
+      for (const slide of this.elementSurfaces(draft)) {
         for (const el of slide.elements) {
           if (!ids.has(el.id) || el.locked) continue;
           switch (mode) {
@@ -1003,7 +1089,7 @@ class EditorStore {
     const availableGap = (end - start - occupied) / (ordered.length - 1);
 
     this.commit((draft) => {
-      const slide = draft.slides.find((item) => item.id === this.state.currentSlideId);
+      const slide = this.editingSlide(draft);
       if (!slide) return;
       const items = slide.elements
         .filter((el) => ids.has(el.id) && !el.locked)
@@ -1062,9 +1148,10 @@ class EditorStore {
     } else {
       this.pushHistory();
     }
-    const synced = syncAiTasks(presentation);
+    const synced = syncAiTasks(migratePresentationFonts(presentation));
     this.set({
       presentation: synced,
+      masterMode: null,
       currentSlideId: synced.slides[0]?.id ?? '',
       selectedSlideIds: synced.slides[0] ? [synced.slides[0].id] : [],
       selectedIds: [],

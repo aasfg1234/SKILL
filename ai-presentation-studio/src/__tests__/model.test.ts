@@ -22,6 +22,9 @@ describe('Presentation Specification', () => {
     expect(p.settings.width).toBe(1920);
     expect(p.settings.height).toBe(1080);
     expect(p.metadata.title).toBe('2026 AI 科技趨勢');
+    expect(p.masters?.cover).toMatchObject({ id: 'master-cover', title: '封面母片', elements: [] });
+    expect(p.masters?.content).toMatchObject({ id: 'master-content', title: '內容母片', elements: [] });
+    expect(p.slides[0].masterKind).toBeUndefined();
   });
 
   it('TASK-001 指向 slide-02 的 ai-chart-001', () => {

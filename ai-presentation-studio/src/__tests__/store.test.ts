@@ -47,6 +47,62 @@ describe('編輯器 Store', () => {
     expect(editorStore.getState().presentation.slides.map((slide) => slide.id)).toEqual(originalIds);
   });
 
+  it('可以切換到上一張或下一張投影片，且不會越過頭尾', () => {
+    expect(editorStore.navigateSlide(-1)).toBe(false);
+    expect(editorStore.getState().currentSlideId).toBe('slide-01');
+
+    expect(editorStore.navigateSlide(1)).toBe(true);
+    expect(editorStore.getState().currentSlideId).toBe('slide-02');
+
+    expect(editorStore.navigateSlide(-1)).toBe(true);
+    expect(editorStore.getState().currentSlideId).toBe('slide-01');
+
+    const lastSlide = editorStore.getState().presentation.slides.at(-1);
+    editorStore.selectSlide(lastSlide!.id);
+    expect(editorStore.navigateSlide(1)).toBe(false);
+    expect(editorStore.getState().currentSlideId).toBe(lastSlide!.id);
+  });
+
+  it('封面與內容母片可以分開編輯及套用背景', () => {
+    editorStore.enterMasterMode('cover');
+    expect(editorStore.getState().masterMode).toBe('cover');
+
+    const footer = createTextElement({ id: 'master-footer', text: '共用頁尾', x: 100, y: 980 });
+    editorStore.addElement(footer);
+    expect(editorStore.getState().presentation.masters?.cover.elements).toHaveLength(1);
+    expect(editorStore.getState().presentation.masters?.content.elements).toHaveLength(0);
+    expect(editorStore.getState().presentation.slides[0].elements).not.toContainEqual(
+      expect.objectContaining({ id: 'master-footer' }),
+    );
+
+    editorStore.updateElement('master-footer', { text: '更新後頁尾' });
+    expect(editorStore.getState().presentation.masters?.cover.elements[0]).toMatchObject({
+      id: 'master-footer',
+      text: '更新後頁尾',
+    });
+    editorStore.undo();
+    expect(editorStore.getState().presentation.masters?.cover.elements[0]).toMatchObject({
+      text: '共用頁尾',
+    });
+    editorStore.redo();
+    expect(editorStore.getState().presentation.masters?.cover.elements[0]).toMatchObject({
+      text: '更新後頁尾',
+    });
+
+    editorStore.getState().presentation.slides.forEach((slide) => {
+      editorStore.updateSlide(slide.id, { useMasterBackground: false });
+    });
+    editorStore.applyMasterBackgroundToAllSlides();
+    expect(editorStore.getState().presentation.slides[0].useMasterBackground).toBe(true);
+    expect(editorStore.getState().presentation.slides[1].useMasterBackground).toBe(false);
+
+    editorStore.exitMasterMode();
+    expect(editorStore.getState().masterMode).toBe(null);
+    expect(editorStore.getState().presentation.masters?.cover.elements[0]).toMatchObject({
+      text: '更新後頁尾',
+    });
+  });
+
   it('至少保留一張投影片', () => {
     editorStore.replacePresentation(
       { ...createDemoPresentation(), slides: [createDemoPresentation().slides[0]] },

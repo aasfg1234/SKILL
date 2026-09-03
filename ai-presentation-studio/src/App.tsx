@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { editorStore, useEditorState } from './store/editorStore';
 import { saveNow } from './actions';
 import { TopBar } from './components/TopBar';
@@ -72,7 +72,7 @@ function useGlobalShortcuts() {
       }
       if (mod && e.key.toLowerCase() === 'a') {
         e.preventDefault();
-        const slide = store.presentation.slides.find((s) => s.id === store.currentSlideId);
+        const slide = editorStore.currentSlide;
         editorStore.select((slide?.elements ?? []).map((el) => el.id));
         return;
       }
@@ -100,8 +100,13 @@ function useGlobalShortcuts() {
         case 'ArrowRight':
         case 'ArrowUp':
         case 'ArrowDown': {
-          if (store.selectedIds.length === 0) return;
           e.preventDefault();
+          if (store.selectedIds.length === 0) {
+            if (store.dialog) return;
+            const direction = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
+            editorStore.navigateSlide(direction);
+            return;
+          }
           const step = e.shiftKey ? 10 : 1;
           const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
           const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
@@ -152,6 +157,8 @@ function useGlobalShortcuts() {
 
 export default function App() {
   const state = useEditorState();
+  const [slideListOpen, setSlideListOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
   useGlobalShortcuts();
 
   if (state.previewMode) {
@@ -167,11 +174,11 @@ export default function App() {
     <div className="flex h-full flex-col">
       <TopBar />
       <div className="flex min-h-0 flex-1">
-        <SlideList />
+        <SlideList collapsed={!slideListOpen} onToggle={() => setSlideListOpen((open) => !open)} />
         <main className="min-w-0 flex-1">
           <Canvas />
         </main>
-        <RightPanel />
+        <RightPanel collapsed={!rightPanelOpen} onToggle={() => setRightPanelOpen((open) => !open)} />
       </div>
       <BottomToolbar />
       <Dialogs />

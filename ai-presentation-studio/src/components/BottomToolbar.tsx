@@ -16,9 +16,9 @@ const TOOLS: Array<{ id: ToolId; label: string; icon: string; hint: string }> = 
 
 export function BottomToolbar() {
   const state = useEditorState();
-  const currentSlide = state.presentation.slides.find(
-    (slide) => slide.id === state.currentSlideId,
-  );
+  const currentSlide = state.masterMode
+    ? state.presentation.masters?.[state.masterMode]
+    : state.presentation.slides.find((slide) => slide.id === state.currentSlideId);
   const [arrangeOpen, setArrangeOpen] = useState(false);
   const arrangeRef = useRef<HTMLDivElement | null>(null);
   const editingGroupName = useRef(false);
@@ -92,13 +92,14 @@ export function BottomToolbar() {
         type="button"
         className="tool-btn font-bold"
         data-active={state.tool === 'ai_component'}
-        title="在畫布上拖出一個區域，宣告一項待 AI 完成的任務"
         style={
           state.tool === 'ai_component'
             ? undefined
             : { background: 'var(--color-brand)', color: 'var(--color-brand-ink)' }
         }
         onClick={() => editorStore.setTool('ai_component')}
+        disabled={Boolean(state.masterMode)}
+        title={state.masterMode ? '母片不能加入 AI 元件' : '在畫布上拖出一個區域，宣告一項待 AI 完成的任務'}
       >
         <Icon name="sparkles" size={15} />
         AI 元件
@@ -106,7 +107,9 @@ export function BottomToolbar() {
 
       <span className="ml-1 text-[11px] text-ink-3">
         {state.tool === 'select' &&
-          '提示：雙擊文字可直接編輯；按住 Shift 可複選；按住 Alt 暫時關閉自動對齊。'}
+          (state.masterMode
+            ? `${state.masterMode === 'cover' ? '封面' : '內容'}母片：新增內容會出現在套用這張母片的投影片。`
+            : '提示：滾輪或方向鍵可換頁；選取元件後，方向鍵會移動元件。')}
         {state.tool === 'text' && '在畫布上點一下或拖曳文字框，接著直接輸入文字。'}
         {state.tool === 'image' && '在畫布上點一下或拖曳圖片框，接著選擇圖片。'}
         {state.tool === 'table' && '在畫布上點一下或拖曳表格，接著雙擊表格編輯儲存格。'}

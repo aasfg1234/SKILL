@@ -4,8 +4,11 @@ import { renderPresentationToHtml } from '../renderer/renderHtml';
 import { applyPatch } from '../model/patch';
 import { buildMockPatch } from '../handoff/mockAi';
 import { escapeHtml } from '../model/sanitize';
-import { createChartElement, createTableElement } from '../model/factory';
+import { createChartElement, createTableElement, createTextElement } from '../model/factory';
 import { mergeCells } from '../model/table';
+// jsdom 套件沒有附 TypeScript 宣告；測試只使用官方的 JSDOM 入口。
+// @ts-expect-error jsdom 沒有型別宣告檔
+import { JSDOM } from 'jsdom';
 
 describe('HTML Renderer', () => {
   const presentation = createDemoPresentation();
@@ -23,6 +26,29 @@ describe('HTML Renderer', () => {
       expect(html).toContain(`id="aps-slide-${slide.id}"`);
     }
     expect(html.match(/class="aps-slide is-active"/g)).toHaveLength(1);
+  });
+
+  it('封面母片與內容母片會輸出到對應的投影片', () => {
+    const p = createDemoPresentation();
+    p.masters!.cover.background = '#123456';
+    p.masters!.content.background = '#654321';
+    p.masters!.cover.elements.push(
+      createTextElement({ id: 'cover-mark', text: '封面共用標誌', x: 100, y: 980, z: 1 }),
+    );
+    p.masters!.content.elements.push(
+      createTextElement({ id: 'content-footer', text: '內容共用頁尾', x: 100, y: 980, z: 1 }),
+    );
+    p.slides.forEach((slide, index) => {
+      slide.masterKind = index === 0 ? 'cover' : 'content';
+      slide.useMasterBackground = true;
+    });
+
+    const out = renderPresentationToHtml(p);
+
+    expect(out.match(/封面共用標誌/g)).toHaveLength(1);
+    expect(out.match(/內容共用頁尾/g)).toHaveLength(p.slides.length - 1);
+    expect(out.match(/style="background:#123456"/g)).toHaveLength(1);
+    expect(out.match(/style="background:#654321"/g)).toHaveLength(p.slides.length - 1);
   });
 
   it('是自足檔案：不依賴 CDN 或任何遠端資源', () => {
@@ -124,6 +150,71 @@ describe('HTML Renderer', () => {
   it('匯出的 HTML 內建講者檢視', () => {
     expect(html).toContain('aps-presenter');
     expect(html).toContain('講者檢視');
+  });
+
+  it('縮放時不會讓投影片被 flex 版面再次壓窄', () => {
+    expect(html).toContain('flex:0 0 auto;');
+    expect(html).toContain('viewport.clientWidth / stage.offsetWidth');
+    expect(html).toContain('viewport.clientHeight / stage.offsetHeight');
+  });
+
+  it('講者檢視預設縮小一半，並可調整字體大小', () => {
+    expect(html).toContain('var presenterFontScale = 0.5');
+    expect(html).toContain('p-font-smaller');
+    expect(html).toContain('p-font-larger');
+    expect(html).toContain('p-font-level');
+    expect(html).toContain("width=480,height=520");
+    expect(html).toContain('presenterWin.resizeTo(480, 520)');
+  });
+
+  it('講者檢視會顯示下一頁標題與內容預覽', () => {
+    expect(html).toContain('p-next-preview');
+    expect(html).toContain('下一頁預覽');
+    expect(html).toContain('updateNextPreview(doc, index + 1)');
+    expect(html).toContain('clone.outerHTML');
+    expect(html).toContain('.main{display:flex;width:100%;flex-direction:column');
+    expect(html).toContain('.next-empty[hidden]{display:none;}');
+    expect(html).toContain('aspect-ratio:1920/1080');
+    expect(html).toContain('.preview{display:block;width:100%');
+    expect(html).toContain('.next-card{display:flex;width:100%');
+    expect(html).toContain('doc.defaultView.onresize');
+    expect(html).toContain('refitNextPreview(doc)');
+    expect(html).toContain('fitNextPreview(frame)');
+  });
+
+  it('匯出檔開啟講者視窗後，按鈕與下一頁預覽都能實際更新', () => {
+    const popup = new JSDOM('<!doctype html><html><body></body></html>', {
+      url: 'http://presenter.test/',
+      pretendToBeVisual: true,
+    });
+    const page = new JSDOM(html, {
+      url: 'http://presentation.test/',
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      beforeParse(window: Window & typeof globalThis) {
+        window.open = () => popup.window as unknown as Window;
+      },
+    });
+
+    page.window.document.dispatchEvent(new page.window.KeyboardEvent('keydown', { key: 'N' }));
+
+    expect(popup.window.document.getElementById('p-font-level')?.textContent).toBe('50%');
+    expect(popup.window.document.getElementById('p-next')?.textContent).toContain(
+      presentation.slides[1].title,
+    );
+    const preview = popup.window.document.getElementById('p-next-preview');
+    const lastPageMessage = popup.window.document.getElementById('p-next-empty');
+    expect(preview?.getAttribute('data-slide-index')).toBe('1');
+    expect((preview as HTMLIFrameElement | null)?.srcdoc).toContain(presentation.slides[1].title);
+    expect(lastPageMessage?.hidden).toBe(true);
+    expect(popup.window.getComputedStyle(lastPageMessage!).display).toBe('none');
+
+    popup.window.document.getElementById('p-font-larger')?.click();
+    expect(popup.window.document.getElementById('p-font-level')?.textContent).toBe('60%');
+
+    page.window.document.dispatchEvent(new page.window.KeyboardEvent('keydown', { key: 'N' }));
+    page.window.close();
+    popup.window.close();
   });
 
   it('匯出的 HTML 以拉丁字型開頭，換系統開啟才不會跑版', () => {

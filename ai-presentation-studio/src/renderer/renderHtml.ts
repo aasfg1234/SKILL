@@ -2,6 +2,7 @@ import { escapeHtml } from '../model/sanitize';
 import type { Presentation } from '../model/types';
 import { renderElementToHtml, sortedElements } from './renderElement';
 import { elementsForPresenting } from '../model/presenting';
+import { effectiveSlideBackground, masterForSlide } from '../model/master';
 
 /**
  * Presentation Specification → 單一自足 HTML 檔。
@@ -34,6 +35,7 @@ body{
 }
 #aps-stage{
   width:${width}px;height:${height}px;position:relative;
+  flex:0 0 auto;
   transform-origin:center center;
   box-shadow:0 24px 80px rgba(0,0,0,.45);
 }
@@ -118,7 +120,7 @@ body{
 `.trim();
 }
 
-function navigationScript(total: number): string {
+function navigationScript(total: number, width: number, height: number): string {
   return `
 (function(){
   var slides = Array.prototype.slice.call(document.querySelectorAll('.aps-slide'));
@@ -155,6 +157,7 @@ function navigationScript(total: number): string {
   var inline = document.getElementById('aps-presenter-inline');
   var presenterWin = null;
   var presenterOn = false;
+  var presenterFontScale = 0.5;
   var startedAt = Date.now();
   var timerId = null;
 
@@ -180,31 +183,116 @@ function navigationScript(total: number): string {
     doc.write(
       '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8" />' +
       '<title>講者檢視</title><style>' +
+      ':root{--p-font-scale:.5;}' +
       'html,body{margin:0;height:100%;background:#0F1115;color:#E5E7EB;' +
       'font-family:Arial,"Microsoft JhengHei","PingFang TC",sans-serif;}' +
-      '.wrap{display:flex;flex-direction:column;height:100%;padding:24px;gap:16px;box-sizing:border-box;}' +
-      '.top{display:flex;align-items:baseline;justify-content:space-between;gap:16px;}' +
-      '.timer{font-size:44px;font-weight:700;font-variant-numeric:tabular-nums;}' +
-      '.counter{font-size:16px;color:rgba(229,231,235,.7);}' +
-      '.title{font-size:22px;font-weight:700;}' +
-      '.notes{flex:1;overflow:auto;white-space:pre-wrap;line-height:1.8;font-size:22px;' +
-      'border-top:1px solid rgba(255,255,255,.15);padding-top:16px;}' +
-      '.next{font-size:15px;color:rgba(229,231,235,.65);border-top:1px solid rgba(255,255,255,.12);padding-top:12px;}' +
-      '.tip{font-size:12px;color:rgba(229,231,235,.45);}' +
+      '.wrap{display:grid;grid-template-rows:auto minmax(0,1fr) auto;width:100%;height:100%;padding:16px;gap:12px;box-sizing:border-box;overflow:auto;}' +
+      '.top{display:flex;align-items:center;justify-content:space-between;gap:12px;}' +
+      '.head{min-width:0;}' +
+      '.timer{font-size:calc(44px * var(--p-font-scale));font-weight:700;font-variant-numeric:tabular-nums;}' +
+      '.counter{font-size:calc(16px * var(--p-font-scale));color:rgba(229,231,235,.7);}' +
+      '.title{font-size:calc(22px * var(--p-font-scale));font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}' +
+      '.tools{display:flex;align-items:center;gap:6px;margin-left:auto;}' +
+      '.tools button{min-width:34px;padding:5px 8px;border:1px solid rgba(255,255,255,.18);border-radius:7px;' +
+      'background:rgba(255,255,255,.08);color:#E5E7EB;cursor:pointer;font-size:12px;}' +
+      '.tools button:hover{background:rgba(255,255,255,.16);}' +
+      '.level{min-width:38px;text-align:center;font-size:11px;color:rgba(229,231,235,.65);}' +
+      '.main{display:flex;width:100%;flex-direction:column;align-items:stretch;gap:12px;min-height:0;}' +
+      '.notes{overflow:auto;white-space:pre-wrap;line-height:1.8;font-size:calc(22px * var(--p-font-scale));' +
+      'border-top:1px solid rgba(255,255,255,.15);padding-top:12px;flex:0 1 38%;width:100%;min-height:64px;box-sizing:border-box;}' +
+      '.next-card{display:flex;width:100%;min-width:0;min-height:180px;flex:0 0 auto;flex-direction:column;gap:7px;padding:10px;border-radius:10px;box-sizing:border-box;' +
+      'background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.12);}' +
+      '.next{font-size:calc(15px * var(--p-font-scale));color:rgba(229,231,235,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}' +
+      '.preview{display:block;width:100%;aspect-ratio:${width}/${height};flex:0 0 auto;border:0;border-radius:6px;background:#090A0D;pointer-events:none;}' +
+      '.next-empty{display:flex;flex:1;align-items:center;justify-content:center;color:rgba(229,231,235,.45);font-size:12px;}' +
+      '.next-empty[hidden]{display:none;}' +
+      '.tip{font-size:10px;color:rgba(229,231,235,.45);}' +
+      '@media(max-height:440px){.notes{flex-basis:30%}.next-card{min-height:140px}.tip{display:none}}' +
       '</style></head><body><div class="wrap">' +
-      '<div class="top"><div><div class="counter" id="p-counter"></div>' +
-      '<div class="title" id="p-title"></div></div><div class="timer" id="p-timer">00:00</div></div>' +
-      '<div class="notes" id="p-notes"></div>' +
-      '<div class="next" id="p-next"></div>' +
+      '<div class="top"><div class="head"><div class="counter" id="p-counter"></div>' +
+      '<div class="title" id="p-title"></div></div>' +
+      '<div class="tools" aria-label="字體大小"><button id="p-font-smaller" type="button" title="縮小字體">A−</button>' +
+      '<span class="level" id="p-font-level">50%</span><button id="p-font-larger" type="button" title="放大字體">A＋</button></div>' +
+      '<div class="timer" id="p-timer">00:00</div></div>' +
+      '<div class="main"><div class="notes" id="p-notes"></div>' +
+      '<div class="next-card"><div class="next" id="p-next"></div>' +
+      '<iframe class="preview" id="p-next-preview" title="下一頁預覽"></iframe>' +
+      '<div class="next-empty" id="p-next-empty" hidden>這是最後一頁</div></div></div>' +
       '<div class="tip">把這個視窗留在自己的螢幕，簡報視窗放到投影機並按 F 全螢幕。兩個視窗都可以用方向鍵換頁。</div>' +
       '</div></body></html>'
     );
     doc.close();
+    var smaller = doc.getElementById('p-font-smaller');
+    var larger = doc.getElementById('p-font-larger');
+    if (smaller) smaller.addEventListener('click', function(){ changePresenterFont(doc, -0.1); });
+    if (larger) larger.addEventListener('click', function(){ changePresenterFont(doc, 0.1); });
+    applyPresenterFont(doc);
+    if (doc.defaultView) {
+      doc.defaultView.onresize = function(){
+        doc.defaultView.requestAnimationFrame(function(){ refitNextPreview(doc); });
+      };
+    }
   }
 
   function setText(doc, id, value){
     var node = doc.getElementById(id);
     if (node) node.textContent = value;
+  }
+
+  function applyPresenterFont(doc){
+    doc.documentElement.style.setProperty('--p-font-scale', String(presenterFontScale));
+    setText(doc, 'p-font-level', Math.round(presenterFontScale * 100) + '%');
+  }
+
+  function changePresenterFont(doc, delta){
+    presenterFontScale = Math.max(0.4, Math.min(1.2, Math.round((presenterFontScale + delta) * 10) / 10));
+    applyPresenterFont(doc);
+  }
+
+  function fitNextPreview(frame){
+    var previewDoc = frame.contentDocument;
+    if (!previewDoc) return;
+    var previewStage = previewDoc.getElementById('aps-stage');
+    var previewViewport = previewDoc.getElementById('aps-viewport');
+    if (!previewStage || !previewViewport) return;
+    var viewportWidth = previewViewport.clientWidth;
+    var viewportHeight = previewViewport.clientHeight;
+    if (viewportWidth <= 0 || viewportHeight <= 0) return;
+    var k = Math.min(viewportWidth / previewStage.offsetWidth,
+      viewportHeight / previewStage.offsetHeight);
+    previewStage.style.transform = 'scale(' + k + ')';
+  }
+
+  function refitNextPreview(doc){
+    var frame = doc.getElementById('p-next-preview');
+    if (frame && !frame.hidden) fitNextPreview(frame);
+  }
+
+  function updateNextPreview(doc, nextIndex){
+    var frame = doc.getElementById('p-next-preview');
+    var empty = doc.getElementById('p-next-empty');
+    var source = slides[nextIndex];
+    if (!frame || !empty) return;
+    if (!source) {
+      frame.hidden = true;
+      empty.hidden = false;
+      frame.removeAttribute('data-slide-index');
+      return;
+    }
+    frame.hidden = false;
+    empty.hidden = true;
+    if (frame.getAttribute('data-slide-index') === String(nextIndex)) return;
+    frame.setAttribute('data-slide-index', String(nextIndex));
+    var clone = source.cloneNode(true);
+    clone.classList.add('is-active');
+    var sourceStyle = document.querySelector('head style');
+    var css = sourceStyle ? sourceStyle.textContent : '';
+    frame.onload = function(){
+      fitNextPreview(frame);
+    };
+    frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8"><style>' + css +
+      '#aps-stage{flex:0 0 auto;box-shadow:none}</style></head><body><div id="aps-viewport">' +
+      '<div id="aps-stage">' + clone.outerHTML + '</div></div></body></html>';
   }
 
   function updatePresenter(){
@@ -223,6 +311,7 @@ function navigationScript(total: number): string {
       setText(doc, 'p-notes', notes);
       setText(doc, 'p-next', nextText);
       setText(doc, 'p-timer', time);
+      updateNextPreview(doc, index + 1);
       return;
     }
     if (inline && !inline.hidden) {
@@ -236,8 +325,9 @@ function navigationScript(total: number): string {
   function openPresenter(){
     presenterOn = true;
     startedAt = Date.now();
-    try { presenterWin = window.open('', 'aps-presenter', 'width=980,height=720'); } catch (err) { presenterWin = null; }
+    try { presenterWin = window.open('', 'aps-presenter', 'width=480,height=520'); } catch (err) { presenterWin = null; }
     if (presenterWin && presenterWin.document) {
+      try { presenterWin.resizeTo(480, 520); } catch (err) {}
       writeShell(presenterWin.document);
       // 講者視窗被點到時焦點會跑過去，方向鍵要能繼續換頁。
       try { presenterWin.document.addEventListener('keydown', handleKey); } catch (err) {}
@@ -273,7 +363,9 @@ function navigationScript(total: number): string {
   });
 
   function fit(){
-    var k = Math.min(window.innerWidth / stage.offsetWidth, window.innerHeight / stage.offsetHeight);
+    var viewport = document.getElementById('aps-viewport');
+    if (!viewport) return;
+    var k = Math.min(viewport.clientWidth / stage.offsetWidth, viewport.clientHeight / stage.offsetHeight);
     stage.style.transform = 'scale(' + k + ')';
   }
 
@@ -345,17 +437,27 @@ export function renderPresentationToHtml(
   const { showControls = true, includeBranding = true } = options;
   const slidesHtml = presentation.slides
     .map((slide, i) => {
-      const body = sortedElements(
+      const master = masterForSlide(presentation, slide, i);
+      const masterBody = sortedElements(
+        elementsForPresenting(
+          master?.elements ?? [],
+          presentation.settings.hideIncompleteAi === true,
+        ),
+      )
+        .map(renderElementToHtml)
+        .join('\n      ');
+      const slideBody = sortedElements(
         elementsForPresenting(slide.elements, presentation.settings.hideIncompleteAi === true),
       )
         .map(renderElementToHtml)
         .join('\n      ');
+      const body = [masterBody, slideBody].filter(Boolean).join('\n      ');
       return `    <section class="aps-slide${i === 0 ? ' is-active' : ''}" id="aps-slide-${escapeHtml(
         slide.id,
       )}" data-index="${i + 1}" aria-label="${escapeHtml(slide.title)}" data-title="${escapeHtml(
         slide.title,
       )}" data-notes="${escapeHtml(slide.notes)}" style="background:${escapeHtml(
-        slide.background,
+        effectiveSlideBackground(presentation, slide, i),
       )}">
       ${body}
     </section>`;
@@ -409,7 +511,11 @@ ${slidesHtml}
 </div>
 ${controls}
 <script>
-${navigationScript(presentation.slides.length)}
+${navigationScript(
+  presentation.slides.length,
+  presentation.settings.width,
+  presentation.settings.height,
+)}
 </${''}script>
 </body>
 </html>

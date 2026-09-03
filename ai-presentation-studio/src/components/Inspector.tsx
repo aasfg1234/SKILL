@@ -21,6 +21,7 @@ import {
   removeTableRow,
 } from '../model/table';
 import { FONT_CHOICES, fontIdOfStack, fontStackOf } from '../lib/fonts';
+import { masterKindForSlide } from '../model/master';
 import {
   CHART_TYPES,
   insertSeriesRow,
@@ -171,9 +172,12 @@ function FontSelect({
 
 function SlideInspector() {
   const state = useEditorState();
-  const slide = state.presentation.slides.find((s) => s.id === state.currentSlideId);
+  const slide = state.masterMode
+    ? state.presentation.masters?.[state.masterMode]
+    : state.presentation.slides.find((s) => s.id === state.currentSlideId);
   if (!slide) return null;
-  const index = state.presentation.slides.findIndex((s) => s.id === slide.id) + 1;
+  const slideIndex = state.presentation.slides.findIndex((s) => s.id === slide.id);
+  const index = slideIndex + 1;
 
   return (
     <>
@@ -205,34 +209,86 @@ function SlideInspector() {
         </div>
       </Section>
 
-      <Section title={`投影片 ${index}`} icon="slides">
-        <Field label="標題">
-          <input
-            className="field-input"
-            value={slide.title}
-            onChange={(e) => editorStore.updateSlide(slide.id, { title: e.target.value })}
-          />
-        </Field>
+      <Section
+        title={state.masterMode
+          ? `${state.masterMode === 'cover' ? '封面' : '內容'}母片設計`
+          : `投影片 ${index}`}
+        icon="slides"
+      >
+        {!state.masterMode && (
+          <Field label="標題">
+            <input
+              className="field-input"
+              value={slide.title}
+              onChange={(e) => editorStore.updateSlide(slide.id, { title: e.target.value })}
+            />
+          </Field>
+        )}
+        {!state.masterMode && (
+          <Field label="使用母片">
+            <select
+              className="field-input"
+              value={masterKindForSlide(slide, slideIndex)}
+              onChange={(e) => editorStore.updateSlide(slide.id, {
+                masterKind: e.target.value as 'cover' | 'content',
+                useMasterBackground: true,
+              })}
+            >
+              <option value="cover">封面母片</option>
+              <option value="content">內容母片</option>
+            </select>
+          </Field>
+        )}
+        {!state.masterMode && (
+          <label className="flex items-center gap-2 text-[11.5px] text-ink-2">
+            <input
+              type="checkbox"
+              checked={slide.useMasterBackground === true}
+              onChange={(e) => editorStore.updateSlide(slide.id, { useMasterBackground: e.target.checked })}
+            />
+            使用母片背景
+          </label>
+        )}
         <Field label="背景色">
           <ColorInput
             value={slide.background}
-            onChange={(v) => editorStore.updateSlide(slide.id, { background: v })}
+            onChange={(v) =>
+              state.masterMode
+                ? editorStore.updateMaster({ background: v })
+                : editorStore.updateSlide(slide.id, { background: v, useMasterBackground: false })
+            }
           />
         </Field>
-        <Field label="備註">
-          <textarea
-            className="field-input min-h-[72px] resize-y"
-            value={slide.notes}
-            placeholder="這一頁要講的重點…"
-            onChange={(e) => editorStore.updateSlide(slide.id, { notes: e.target.value })}
-          />
-        </Field>
+        {state.masterMode && (
+          <button
+            type="button"
+            className="tool-btn w-full justify-center"
+            onClick={() => editorStore.applyMasterBackgroundToAllSlides()}
+          >
+            套用背景到使用這張母片的投影片
+          </button>
+        )}
+        {!state.masterMode && (
+          <Field label="備註">
+            <textarea
+              className="field-input min-h-[72px] resize-y"
+              value={slide.notes}
+              placeholder="這一頁要講的重點…"
+              onChange={(e) => editorStore.updateSlide(slide.id, { notes: e.target.value })}
+            />
+          </Field>
+        )}
+        {state.masterMode && (
+          <button type="button" className="tool-btn w-full justify-center" onClick={() => editorStore.exitMasterMode()}>
+            返回投影片
+          </button>
+        )}
       </Section>
 
       <div className="px-3.5 py-4 text-[11.5px] leading-relaxed text-ink-3">
-        在畫布上點選元素即可編輯其屬性。
+        {state.masterMode ? '母片元素會出現在套用這張母片的投影片。' : '在畫布上點選元素即可編輯其屬性。'}
         <br />
-        使用下方工具列可以新增文字、圖形、圖片與 <strong className="text-brand">AI 元件</strong>。
+        {state.masterMode ? '使用下方工具列新增共用文字、圖形或圖片。' : <>使用下方工具列可以新增文字、圖形、圖片與 <strong className="text-brand">AI 元件</strong>。</>}
       </div>
     </>
   );
@@ -1038,7 +1094,9 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
 
 export function Inspector() {
   const state = useEditorState();
-  const slide = state.presentation.slides.find((s) => s.id === state.currentSlideId);
+  const slide = state.masterMode
+    ? state.presentation.masters?.[state.masterMode]
+    : state.presentation.slides.find((s) => s.id === state.currentSlideId);
   const selected = (slide?.elements ?? []).filter((el) => state.selectedIds.includes(el.id));
 
   return (

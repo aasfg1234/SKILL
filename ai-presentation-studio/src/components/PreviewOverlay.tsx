@@ -5,6 +5,7 @@ import { Icon } from './Icon';
 import { LAYER } from '../lib/layers';
 import { buildPresenterView, previewStepFromKey } from '../model/presenter';
 import { elementsForPresenting } from '../model/presenting';
+import { effectiveSlideBackground, masterForSlide } from '../model/master';
 
 /** 播放模式：只顯示投影片，不顯示任何編輯器介面。 */
 export function PreviewOverlay() {
@@ -12,6 +13,8 @@ export function PreviewOverlay() {
   const { width, height } = state.presentation.settings;
   const slides = state.presentation.slides;
   const slide = slides[state.previewIndex] ?? slides[0];
+  const slideIndex = Math.max(0, slides.indexOf(slide));
+  const master = slide ? masterForSlide(state.presentation, slide, slideIndex) : undefined;
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [scale, setScale] = useState(0.5);
   const [showHint, setShowHint] = useState(true);
@@ -129,11 +132,19 @@ export function PreviewOverlay() {
             transform: `scale(${scale})`,
             transformOrigin: 'center center',
             position: 'relative',
-            background: slide.background,
+            background: effectiveSlideBackground(state.presentation, slide, slideIndex),
             fontFamily: state.presentation.theme.fontFamily,
             flex: '0 0 auto',
           }}
         >
+          {sortByZ(
+            elementsForPresenting(
+              master?.elements ?? [],
+              state.presentation.settings.hideIncompleteAi === true,
+            ),
+          ).map((el) => (
+            <ElementView key={`master-${el.id}`} el={el} mode="present" />
+          ))}
           {sortByZ(
             elementsForPresenting(
               slide.elements,

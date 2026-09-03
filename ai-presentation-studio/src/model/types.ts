@@ -232,8 +232,19 @@ export interface Slide {
   id: string;
   title: string;
   background: string;
+  /** true 時使用母片背景；false 時使用本頁背景。 */
+  useMasterBackground?: boolean;
+  /** 這張投影片使用封面母片或內容母片。 */
+  masterKind?: MasterKind;
   notes: string;
   elements: SlideElement[];
+}
+
+export type MasterKind = 'cover' | 'content';
+
+export interface PresentationMasters {
+  cover: Slide;
+  content: Slide;
 }
 
 export interface AITaskConstraints {
@@ -288,6 +299,10 @@ export interface Presentation {
   };
   settings: PresentationSettings;
   theme: Theme;
+  /** 舊版單一母片，只供資料升級使用。 */
+  master?: Slide;
+  /** 封面與內容兩種母片。舊檔載入時會自動補上。 */
+  masters?: PresentationMasters;
   slides: Slide[];
   aiTasks: AITask[];
   /** 預留未來執行模式，第一版僅 external-handoff */

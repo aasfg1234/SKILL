@@ -32,6 +32,7 @@ import { ElementView, sortByZ } from './ElementView';
 import { LAYER } from '../lib/layers';
 import { buildContextMenu, type ContextMenuItem } from '../lib/contextMenu';
 import { Icon } from './Icon';
+import { effectiveSlideBackground, masterForSlide } from '../model/master';
 
 /** 畫布：真正的選取、拖曳、縮放、對齊與繪製，全部以指標事件實作。 */
 
@@ -325,10 +326,19 @@ export function countSelectedOverlaps(elements: SlideElement[], selectedIds: str
 
 export function Canvas() {
   const state = useEditorState();
-  const slide = state.presentation.slides.find((s) => s.id === state.currentSlideId);
+  const regularSlide = state.presentation.slides.find((s) => s.id === state.currentSlideId);
+  const regularSlideIndex = state.presentation.slides.findIndex((s) => s.id === state.currentSlideId);
+  const selectedMaster = state.masterMode
+    ? state.presentation.masters?.[state.masterMode]
+    : undefined;
+  const slide = selectedMaster ?? regularSlide;
+  const master = regularSlide && regularSlideIndex >= 0
+    ? masterForSlide(state.presentation, regularSlide, regularSlideIndex)
+    : undefined;
   const { width, height } = state.presentation.settings;
 
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const pageWheel = useRef({ delta: 0, lastChangeAt: 0 });
   const stageRef = useRef<HTMLDivElement | null>(null);
   const interaction = useRef<Interaction>(null);
   const pendingTextCaret = useRef<{ x: number; y: number } | null>(null);
@@ -361,10 +371,21 @@ export function Canvas() {
       );
       if (Number.isFinite(k) && k > 0) editorStore.setFitZoom(k);
     };
+    let frameId: number | null = null;
+    const scheduleCompute = () => {
+      if (frameId !== null) return;
+      frameId = requestAnimationFrame(() => {
+        frameId = null;
+        compute();
+      });
+    };
     compute();
-    const ro = new ResizeObserver(compute);
+    const ro = new ResizeObserver(scheduleCompute);
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      if (frameId !== null) cancelAnimationFrame(frameId);
+    };
   }, [state.fitToWindow, width, height, state.presentation.slides.length]);
 
   const toStage = useCallback(
@@ -511,14 +532,28 @@ export function Canvas() {
     (e.target as Element).setPointerCapture?.(e.pointerId);
   };
 
-  // Ctrl + 滾輪縮放。React 的 onWheel 是被動監聽，擋不掉瀏覽器縮放，所以直接掛原生事件。
+  // Ctrl + 滾輪縮放；一般滾輪換頁。原生事件可確實擋下瀏覽器的預設捲動。
   useEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
     const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      editorStore.setZoom(zoomWithWheel(editorStore.getState().zoom, e.deltaY));
+      if (e.ctrlKey || e.metaKey) {
+        pageWheel.current.delta = 0;
+        editorStore.setZoom(zoomWithWheel(editorStore.getState().zoom, e.deltaY));
+        return;
+      }
+      if (editorStore.getState().editingTextId) return;
+
+      const now = Date.now();
+      if (now - pageWheel.current.lastChangeAt < 450) return;
+      const unit = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : e.deltaMode === WheelEvent.DOM_DELTA_PAGE ? wrap.clientHeight : 1;
+      pageWheel.current.delta += (Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX) * unit;
+      if (Math.abs(pageWheel.current.delta) < 40) return;
+
+      const direction = pageWheel.current.delta > 0 ? 1 : -1;
+      pageWheel.current.delta = 0;
+      if (editorStore.navigateSlide(direction)) pageWheel.current.lastChangeAt = now;
     };
     wrap.addEventListener('wheel', onWheel, { passive: false });
     return () => wrap.removeEventListener('wheel', onWheel);
@@ -915,7 +950,10 @@ export function Canvas() {
       setMotionInfo(rounded);
       if (current.isGroup) {
         editorStore.transient((draft) => {
-          for (const currentSlide of draft.slides) {
+          const surfaces = draft.masters
+            ? [draft.masters.cover, draft.masters.content, ...draft.slides]
+            : draft.slides;
+          for (const currentSlide of surfaces) {
             for (const el of currentSlide.elements) {
               const source = current.originals.get(el.id);
               if (!source) continue;
@@ -941,7 +979,10 @@ export function Canvas() {
       if (rotatedBounds) setMotionInfo({ ...rotatedBounds, rotation: degrees });
       const byId = new Map(rotated.map((el) => [el.id, el]));
       editorStore.transient((draft) => {
-        for (const currentSlide of draft.slides) {
+        const surfaces = draft.masters
+          ? [draft.masters.cover, draft.masters.content, ...draft.slides]
+          : draft.slides;
+        for (const currentSlide of surfaces) {
           for (const el of currentSlide.elements) {
             const next = byId.get(el.id);
             if (next) Object.assign(el, next);
@@ -1199,6 +1240,19 @@ export function Canvas() {
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
+      {state.masterMode && (
+        <div
+          className="pointer-events-none absolute left-4 top-4 rounded-lg border px-3 py-2 text-[12px] font-bold shadow-sm"
+          style={{
+            zIndex: LAYER.canvasBadge,
+            borderColor: 'var(--color-brand)',
+            background: 'var(--color-brand-soft)',
+            color: 'var(--color-brand)',
+          }}
+        >
+          {state.masterMode === 'cover' ? '封面母片' : '內容母片'}　新增的內容會顯示在套用這張母片的投影片
+        </div>
+      )}
       <div className="flex min-h-full min-w-full items-center justify-center p-9">
         <div
           ref={stageRef}
@@ -1208,7 +1262,9 @@ export function Canvas() {
             height,
             transform: `scale(${zoom})`,
             transformOrigin: 'center center',
-            background: slide.background,
+            background: state.masterMode || !regularSlide || regularSlideIndex < 0
+              ? slide.background
+              : effectiveSlideBackground(state.presentation, regularSlide, regularSlideIndex),
             fontFamily: state.presentation.theme.fontFamily,
             cursor: state.tool === 'select' ? 'default' : 'crosshair',
             flex: '0 0 auto',
@@ -1220,6 +1276,13 @@ export function Canvas() {
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
         >
+          {!state.masterMode && master && (
+            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }}>
+              {sortByZ(master.elements).map((el) => (
+                <ElementView key={`master-${el.id}`} el={el} mode="present" />
+              ))}
+            </div>
+          )}
           {sortByZ(slide.elements).map((el) => (
             <div
               key={el.id}
@@ -1245,7 +1308,7 @@ export function Canvas() {
                   editorStore.setEditingText(el.id);
                 }
               }}
-              style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+              style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }}
             >
               <div
                 style={{

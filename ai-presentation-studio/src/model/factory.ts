@@ -258,6 +258,8 @@ export function createSlide(init: Partial<Slide> = {}): Slide {
     id: init.id ?? newSlideId(),
     title: init.title ?? '未命名投影片',
     background: init.background ?? '#FFFFFF',
+    useMasterBackground: init.useMasterBackground ?? true,
+    ...(init.masterKind ? { masterKind: init.masterKind } : {}),
     notes: init.notes ?? '',
     elements: init.elements ?? [],
   };
@@ -282,6 +284,21 @@ export function createPresentation(init: Partial<Presentation> = {}): Presentati
       aspectRatio: '16:9',
     },
     theme: init.theme ?? createDefaultTheme(),
+    masters:
+      init.masters ?? {
+        cover: createSlide({
+          id: 'master-cover',
+          title: '封面母片',
+          background: '#FFFFFF',
+          useMasterBackground: false,
+        }),
+        content: createSlide({
+          id: 'master-content',
+          title: '內容母片',
+          background: '#FFFFFF',
+          useMasterBackground: false,
+        }),
+      },
     slides: init.slides ?? [createSlide({ title: '投影片 1' })],
     aiTasks: init.aiTasks ?? [],
     execution: init.execution ?? { mode: 'external-handoff' },

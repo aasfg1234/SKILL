@@ -172,7 +172,9 @@ const LAYER_ICON: Record<string, string> = {
 /** 圖層面板：由上而下列出這一頁的元素，順序與畫布的疊放一致。 */
 function LayerPanel() {
   const state = useEditorState();
-  const slide = state.presentation.slides.find((s) => s.id === state.currentSlideId);
+  const slide = state.masterMode
+    ? state.presentation.masters?.[state.masterMode]
+    : state.presentation.slides.find((s) => s.id === state.currentSlideId);
   const items = slide ? buildLayerList(slide) : [];
 
   if (items.length === 0) {
@@ -191,7 +193,7 @@ function LayerPanel() {
         className="border-b px-3.5 py-2 text-[11px] text-ink-3"
         style={{ borderColor: 'var(--color-line-2)' }}
       >
-        由上而下＝畫布上的疊放順序，第一個蓋在最上面
+        {state.masterMode ? '母片元素會放在每張投影片內容的下方' : '由上而下＝畫布上的疊放順序，第一個蓋在最上面'}
       </div>
       <ul className="flex-1 space-y-0.5 overflow-y-auto p-2">
         {items.map((item) => {
@@ -269,10 +271,25 @@ function LayerPanel() {
   );
 }
 
-export function RightPanel() {
+export function RightPanel({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const [tab, setTab] = useState<'inspector' | 'layers' | 'tasks'>('inspector');
   const state = useEditorState();
   const pending = state.presentation.aiTasks.filter((t) => t.status !== 'completed').length;
+
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        className="flex w-8 shrink-0 items-center justify-center border-l text-ink-3 hover:text-ink-1"
+        style={{ borderColor: 'var(--color-line)', background: 'var(--color-panel)' }}
+        title="展開屬性與圖層清單"
+        aria-label="展開屬性與圖層清單"
+        onClick={onToggle}
+      >
+        <Icon name="left" size={16} />
+      </button>
+    );
+  }
 
   return (
     <aside
@@ -317,6 +334,15 @@ export function RightPanel() {
               {pending}
             </span>
           )}
+        </button>
+        <button
+          type="button"
+          className="tool-btn shrink-0 px-1.5"
+          title="收起屬性與圖層清單"
+          aria-label="收起屬性與圖層清單"
+          onClick={onToggle}
+        >
+          <Icon name="right" size={14} />
         </button>
       </div>
       <div className="min-h-0 flex-1">
