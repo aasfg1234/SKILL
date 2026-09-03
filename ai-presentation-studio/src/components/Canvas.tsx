@@ -1153,6 +1153,8 @@ export function Canvas() {
     if (!editingTable) setCellRange(null);
   }, [editingTable]);
 
+  // 記住這一次按下去的位置，放開時沒有移動才算「點一下」。
+  const clickStart = useRef<{ x: number; y: number; id: string } | null>(null);
   const editableRef = useRef<HTMLDivElement | null>(null);
   useLayoutEffect(() => {
     const editable = editableRef.current;
@@ -1305,7 +1307,25 @@ export function Canvas() {
           {sortByZ(slide.elements).map((el) => (
             <div
               key={el.id}
-              onPointerDown={(e) => onElementPointerDown(e, el)}
+              onPointerDown={(e) => {
+                clickStart.current = { x: e.clientX, y: e.clientY, id: el.id };
+                onElementPointerDown(e, el);
+              }}
+              onClick={(e) => {
+                // 文字點一下就進入編輯；有拖動過就不算，才不會擋到搬移。
+                if (el.type !== 'text' || el.locked || el.hidden) return;
+                if (state.tool !== 'select' || state.editingTextId === el.id) return;
+                // 加選與群組維持原本行為：加選要保留選取，群組要雙擊才進去。
+                if (e.shiftKey || e.ctrlKey || e.metaKey || el.groupId) return;
+                const start = clickStart.current;
+                clickStart.current = null;
+                if (!start || start.id !== el.id) return;
+                if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 4) return;
+                e.stopPropagation();
+                pendingTextCaret.current = { x: e.clientX, y: e.clientY };
+                editorStore.beginTransaction();
+                editorStore.setEditingText(el.id);
+              }}
               onContextMenu={(e) => openContextMenu(e, el)}
               onDoubleClick={(e) => {
                 e.stopPropagation();
@@ -1342,7 +1362,7 @@ export function Canvas() {
                   width: el.width,
                   height: el.height,
                   pointerEvents: state.tool === 'select' && !el.hidden ? 'auto' : 'none',
-                  cursor: el.locked ? 'not-allowed' : 'move',
+                  cursor: el.locked ? 'not-allowed' : el.type === 'text' ? 'text' : 'move',
                 }}
               />
               <div style={{ pointerEvents: 'none' }}>

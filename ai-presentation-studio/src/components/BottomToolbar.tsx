@@ -1,19 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 import { editorStore, useEditorState, type ToolId } from '../store/editorStore';
 import { Icon } from './Icon';
-import { SHAPE_KINDS, SHAPE_LABELS } from '../model/shapes';
+import { SHAPE_KINDS, SHAPE_LABELS, type ShapeKind } from '../model/shapes';
 import { LAYER } from '../lib/layers';
 
 const TOOLS: Array<{ id: ToolId; label: string; icon: string; hint: string }> = [
   { id: 'select', label: '選取', icon: 'layers', hint: '選取、拖曳、調整大小' },
   { id: 'text', label: '文字', icon: 'text', hint: '拖出一個文字方塊' },
   { id: 'image', label: '圖片', icon: 'image', hint: '插入本機圖片' },
-  { id: 'rect', label: '圖形', icon: 'square', hint: '矩形' },
-  { id: 'ellipse', label: '圓形', icon: 'circle', hint: '橢圓／圓形' },
-  { id: 'line', label: '線條', icon: 'line', hint: '直線' },
   { id: 'table', label: '表格', icon: 'grid', hint: '三列三欄的表格' },
   { id: 'chart', label: '圖表', icon: 'chart', hint: '長條圖／折線圖／圓餅圖' },
 ];
+
+/** 所有圖形集中在同一個選單，使用者不用在工具列上找三顆分開的按鈕。 */
+const SHAPE_MENU: Array<{ label: string; tool: ToolId; shape?: ShapeKind }> = [
+  { label: '矩形', tool: 'rect' },
+  { label: '圓形', tool: 'ellipse' },
+  { label: '線條', tool: 'line' },
+  ...SHAPE_KINDS.map((kind) => ({
+    label: SHAPE_LABELS[kind],
+    tool: 'shape' as ToolId,
+    shape: kind,
+  })),
+];
+
+const SHAPE_TOOLS: ToolId[] = ['rect', 'ellipse', 'line', 'shape'];
 
 export function BottomToolbar() {
   const state = useEditorState();
@@ -87,12 +98,12 @@ export function BottomToolbar() {
         <button
           type="button"
           className="tool-btn"
-          data-active={state.tool === 'shape'}
-          title="三角形、菱形、箭頭、星形、對話框"
+          data-active={SHAPE_TOOLS.includes(state.tool)}
+          title="矩形、圓形、線條、三角形、菱形、箭頭、星形、對話框"
           onClick={() => setShapeOpen((open) => !open)}
         >
           <Icon name="square" size={15} />
-          基本圖形
+          圖形
         </button>
         {shapeOpen && (
           <div
@@ -103,18 +114,23 @@ export function BottomToolbar() {
               zIndex: LAYER.menu,
             }}
           >
-            {SHAPE_KINDS.map((kind) => (
+            {SHAPE_MENU.map((item) => (
               <button
-                key={kind}
+                key={item.label}
                 type="button"
                 className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-[var(--color-panel-2)]"
-                data-active={state.shapeKind === kind}
+                data-active={
+                  item.shape
+                    ? state.tool === 'shape' && state.shapeKind === item.shape
+                    : state.tool === item.tool
+                }
                 onClick={() => {
-                  editorStore.setShapeKind(kind);
+                  if (item.shape) editorStore.setShapeKind(item.shape);
+                  else editorStore.setTool(item.tool);
                   setShapeOpen(false);
                 }}
               >
-                {SHAPE_LABELS[kind]}
+                {item.label}
               </button>
             ))}
           </div>

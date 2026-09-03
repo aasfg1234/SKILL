@@ -10,11 +10,11 @@
 ## 最新 Session
 
 - AI：Claude
-- Session：022
+- Session：023
 - 日期：2026-09-03
 - 狀態：完成
 
-最新 Session 檔案：`AI_HISTORY/2026-09-03_022_Claude.md`
+最新 Session 檔案：`AI_HISTORY/2026-09-03_023_Claude.md`
 
 Git：分支 `claude/ai-presentation-studio-mvp-xwt57g`，工作區乾淨。
 
@@ -65,6 +65,8 @@ Session 020 做完 PowerPoint 常用操作第一批五項：自動頁碼、隱�
 Session 021 補上圖片的拖框裁切，並修好「裁切後圖片沒有放大」的錯誤。
 Session 022 修好「選取框被大面積元素蓋住」，換頁時左邊列表會跟著捲，
 圖層清單可以直接拖曳排序。
+Session 023 文字改成滑鼠移上去顯示 I 字型游標、點一下就編輯；
+工具列的矩形、圓形、線條收進同一個「圖形」選單。
 
 各項修法見 `AI_HISTORY/` 中對應的 Session 檔。
 
@@ -159,7 +161,9 @@ Session 002 第 7 節建議功能的其餘項目，清單見 `2026-09-02_005_Cla
 60. **圖片裁切用 `cropImageStyle()`，外框必須保持 `overflow:hidden`。** 有裁切時圖片一律 `object-fit:fill`，因為使用者已經自己框好範圍。
 61. **裁切樣式一定要帶 `max-width:none` 與 `max-height:none`。** 全域的 `img{max-width:100%}`（Tailwind 預設）會把放大的圖片壓回框寬，看起來像「圖片只是被平移、右邊留白」。Session 021 踩過一次。
 62. **瀏覽器自動化切不了投影片。** 縮圖用 `setPointerCapture` 做拖曳，合成點擊不會觸發 click。要在自動化裡換頁，用 `find` 取得縮圖的 ref 再點，不要用座標。
-63. **畫布上所有「外框類」的東西都必須設 `zIndex: LAYER.canvasOverlay`。** 元素外層固定是 `zIndex:1`，而 `z-index:1` 一定畫在 `auto` 上面。忘了設就會被大面積元素蓋掉（Session 022 修過選取框、對齊輔助線、框選矩形）。不要把元素外層改成更大的數字。
+63. **文字點一下就進入編輯，不是雙擊。** 判斷條件在 `Canvas.tsx` 的元素 `onClick`：拖動超過 4 像素、按著 Shift／Ctrl／Cmd、元素屬於群組、或工具不是「選取」時都不觸發。改動搬移或加選時要一起確認這四個條件還在。
+64. **矩形、圓形、線條與五種基本圖形集中在工具列的「圖形」選單。** 不要再拆回獨立按鈕。矩形／圓形／線條走 `setTool()`，其餘走 `setShapeKind()`。
+65. **畫布上所有「外框類」的東西都必須設 `zIndex: LAYER.canvasOverlay`。** 元素外層固定是 `zIndex:1`，而 `z-index:1` 一定畫在 `auto` 上面。忘了設就會被大面積元素蓋掉（Session 022 修過選取框、對齊輔助線、框選矩形）。不要把元素外層改成更大的數字。
 
 ---
 
