@@ -4,7 +4,7 @@ import { AI_KIND_LABELS, AI_STATUS_ICON, AI_STATUS_LABELS } from '../lib/labels'
 import { copyAiInstruction, exportAiPackage, importCompleted, simulateAiCompletion } from '../actions';
 import { AI_KIND_ICON, Icon } from './Icon';
 import { Inspector } from './Inspector';
-import { buildLayerList } from '../model/layerList';
+import { buildLayerList, type LayerPlace } from '../model/layerList';
 import { ELEMENT_TYPE_LABELS } from '../lib/labels';
 
 /** AI 任務面板：每個任務都可以直接跳到對應的投影片與元素。 */
@@ -172,6 +172,13 @@ const LAYER_ICON: Record<string, string> = {
 /** 圖層面板：由上而下列出這一頁的元素，順序與畫布的疊放一致。 */
 function LayerPanel() {
   const state = useEditorState();
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [drop, setDrop] = useState<{ id: string; place: LayerPlace } | null>(null);
+
+  const clearDrag = () => {
+    setDragId(null);
+    setDrop(null);
+  };
   const slide = state.masterMode
     ? state.presentation.masters?.[state.masterMode]
     : state.presentation.slides.find((s) => s.id === state.currentSlideId);
@@ -193,7 +200,7 @@ function LayerPanel() {
         className="border-b px-3.5 py-2 text-[11px] text-ink-3"
         style={{ borderColor: 'var(--color-line-2)' }}
       >
-        {state.masterMode ? '母片元素會放在每張投影片內容的下方' : '由上而下＝畫布上的疊放順序，第一個蓋在最上面'}
+        {state.masterMode ? '母片元素會放在每張投影片內容的下方' : '由上而下＝畫布上的疊放順序，第一個蓋在最上面。可以直接拖曳調整。'}
       </div>
       <ul className="flex-1 space-y-0.5 overflow-y-auto p-2">
         {items.map((item) => {
@@ -201,8 +208,42 @@ function LayerPanel() {
           return (
             <li key={item.id}>
               <div
+                draggable
+                onDragStart={(event) => {
+                  setDragId(item.id);
+                  event.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragOver={(event) => {
+                  if (!dragId || dragId === item.id) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setDrop({
+                    id: item.id,
+                    place: event.clientY < rect.top + rect.height / 2 ? 'above' : 'below',
+                  });
+                }}
+                onDragLeave={() => setDrop((current) => (current?.id === item.id ? null : current))}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  if (dragId && drop) editorStore.moveLayerTo(dragId, drop.id, drop.place);
+                  clearDrag();
+                }}
+                onDragEnd={clearDrag}
                 className="flex items-center gap-1 rounded-lg px-1.5 py-1 transition hover:bg-panel-2"
-                style={{ background: active ? 'var(--color-brand-soft)' : 'transparent' }}
+                style={{
+                  background: active ? 'var(--color-brand-soft)' : 'transparent',
+                  opacity: dragId === item.id ? 0.5 : 1,
+                  cursor: 'grab',
+                  borderTop:
+                    drop?.id === item.id && drop.place === 'above'
+                      ? '2px solid var(--color-brand)'
+                      : '2px solid transparent',
+                  borderBottom:
+                    drop?.id === item.id && drop.place === 'below'
+                      ? '2px solid var(--color-brand)'
+                      : '2px solid transparent',
+                }}
               >
                 <button
                   type="button"

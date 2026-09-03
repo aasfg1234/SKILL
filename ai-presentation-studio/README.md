@@ -57,7 +57,7 @@ dist/AI-Presentation-Studio.html
 ```bash
 npm run build      # 型別檢查 + 產生免佈署單檔 HTML
 npm run preview    # 以靜態方式預覽 dist/（http://localhost:4173）
-npm test           # 執行 332 項單元／整合測試
+npm test           # 執行 338 項單元／整合測試
 npm run typecheck  # 只做型別檢查
 ```
 

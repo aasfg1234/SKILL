@@ -10,6 +10,7 @@ import {
 import { createDemoPresentation } from '../model/demo';
 import type { ShapeKind } from '../model/shapes';
 import { visibleSlides } from '../model/deck';
+import { moveLayer, type LayerPlace } from '../model/layerList';
 import { buildLayoutElements } from '../model/layouts';
 import { migratePresentationFonts } from '../model/migrate';
 import { replaceInPresentation, type SearchOptions } from '../model/search';
@@ -1018,6 +1019,16 @@ class EditorStore {
           el.y = Math.round(el.y + dy);
         }
       }
+    });
+  }
+
+  /** 把一個圖層拖到另一個圖層的上面或下面。 */
+  moveLayerTo(dragId: string, targetId: string, place: LayerPlace): void {
+    if (dragId === targetId) return;
+    this.commit((draft) => {
+      const slide = this.editingSlide(draft);
+      if (!slide) return;
+      slide.elements = moveLayer(slide.elements, dragId, targetId, place);
     });
   }
 

@@ -79,6 +79,16 @@ export function SlideList({ collapsed, onToggle }: { collapsed: boolean; onToggl
     frameId: number | null;
   }>({ clientX: 0, clientY: 0, frameId: null });
 
+  // 換頁時把目前這一張捲進視線內，滾輪換頁才不會「畫布換了、清單沒動」。
+  // 拖曳中不要插手，不然會跟拖曳的自動捲動打架。
+  useEffect(() => {
+    if (draggingId) return;
+    const card = scrollAreaRef.current?.querySelector<HTMLElement>(
+      `[data-slide-id="${state.currentSlideId}"]`,
+    );
+    card?.scrollIntoView({ block: 'nearest' });
+  }, [state.currentSlideId, draggingId]);
+
   const stopAutoScroll = () => {
     if (autoScrollRef.current.frameId !== null) {
       cancelAnimationFrame(autoScrollRef.current.frameId);

@@ -41,6 +41,39 @@ function labelOf(el: SlideElement): string {
   }
 }
 
+/** 放在目標的上面（比較靠近觀眾）或下面。 */
+export type LayerPlace = 'above' | 'below';
+
+/**
+ * 把一個元素搬到另一個元素的上面或下面，並把 z 重新編成 1 到 n。
+ *
+ * 傳進來的順序不重要，一律以 z 為準；回傳的陣列由下而上排好。
+ * 重新編號是為了不留空號，之後再搬也不會愈算愈亂。
+ */
+export function moveLayer(
+  elements: SlideElement[],
+  dragId: string,
+  targetId: string,
+  place: LayerPlace,
+): SlideElement[] {
+  const ascending = [...elements].sort((a, b) => a.z - b.z);
+  if (dragId === targetId) return ascending;
+
+  const dragged = ascending.find((el) => el.id === dragId);
+  const target = ascending.find((el) => el.id === targetId);
+  if (!dragged || !target) return ascending;
+
+  const rest = ascending.filter((el) => el.id !== dragId);
+  const at = rest.indexOf(target);
+  // 由下而上的陣列裡，「放在上面」等於插在目標後面。
+  rest.splice(place === 'above' ? at + 1 : at, 0, dragged);
+
+  rest.forEach((el, index) => {
+    el.z = index + 1;
+  });
+  return rest;
+}
+
 export function buildLayerList(slide: Slide): LayerItem[] {
   return [...slide.elements]
     .sort((a, b) => b.z - a.z)

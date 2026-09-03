@@ -1370,6 +1370,7 @@ export function Canvas() {
                   height,
                   background: 'var(--color-brand)',
                   pointerEvents: 'none',
+                  zIndex: LAYER.canvasOverlay,
                 }}
               />
             ))}
@@ -1385,6 +1386,7 @@ export function Canvas() {
                   width,
                   background: 'var(--color-brand)',
                   pointerEvents: 'none',
+                  zIndex: LAYER.canvasOverlay,
                 }}
               />
             ))}
@@ -1402,6 +1404,7 @@ export function Canvas() {
                   overlapCount > 0 ? 'var(--color-danger)' : 'var(--color-brand)'
                 }`,
                 pointerEvents: 'none',
+                zIndex: LAYER.canvasOverlay,
               }}
             />
           )}
@@ -1699,6 +1702,7 @@ export function Canvas() {
                 border: `${1 / zoom}px solid var(--color-brand)`,
                 background: 'color-mix(in srgb, var(--color-brand) 12%, transparent)',
                 pointerEvents: 'none',
+                zIndex: LAYER.canvasOverlay,
               }}
             />
           )}
