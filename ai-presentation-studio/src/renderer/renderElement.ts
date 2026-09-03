@@ -244,6 +244,8 @@ export function renderElementToHtml(el: SlideElement): string {
         height: crop.height,
         left: crop.left,
         top: crop.top,
+        'max-width': crop.maxWidth,
+        'max-height': crop.maxHeight,
         'object-fit': crop.objectFit,
         display: crop.display,
       });

@@ -11,7 +11,7 @@ import {
   createTableElement,
   createTextElement,
 } from '../model/factory';
-import type { SlideElement, TableElement, TextElement } from '../model/types';
+import type { ImageElement, SlideElement, TableElement, TextElement } from '../model/types';
 import {
   mergeCells,
   mergeCovering,
@@ -24,6 +24,7 @@ import { editorStore, useEditorState, type ToolId } from '../store/editorStore';
 import { changeIndent } from '../model/textList';
 import { readCaret, writeCaret } from '../lib/caret';
 import { SlideNumber } from './SlideNumber';
+import { CropOverlay } from './CropOverlay';
 import { pickImageFile } from '../lib/files';
 import {
   fitImageIntoSlide,
@@ -336,6 +337,12 @@ export function Canvas() {
     ? state.presentation.masters?.[state.masterMode]
     : undefined;
   const slide = selectedMaster ?? regularSlide;
+  // 正在拖框裁切的圖片；不是圖片或不在這一頁就當作沒有在裁切。
+  const cropping = state.croppingId
+    ? (slide?.elements.find(
+        (el) => el.id === state.croppingId && el.type === 'image',
+      ) as ImageElement | undefined)
+    : undefined;
   const master = regularSlide && regularSlideIndex >= 0
     ? masterForSlide(state.presentation, regularSlide, regularSlideIndex)
     : undefined;
@@ -1302,6 +1309,11 @@ export function Canvas() {
               onContextMenu={(e) => openContextMenu(e, el)}
               onDoubleClick={(e) => {
                 e.stopPropagation();
+                if (el.type === 'image' && !el.locked) {
+                  // 雙擊圖片直接進入拖框裁切。
+                  editorStore.startCrop(el.id);
+                  return;
+                }
                 if ((el.type === 'text' || el.type === 'table') && !el.locked) {
                   pendingTextCaret.current = { x: e.clientX, y: e.clientY };
                   if (el.type === 'table') {
@@ -1340,11 +1352,10 @@ export function Canvas() {
           ))}
 
           {!state.masterMode && (
-            <SlideNumber
-              presentation={state.presentation}
-              index={state.presentation.slides.findIndex((item) => item.id === slide?.id)}
-            />
+            <SlideNumber presentation={state.presentation} index={regularSlideIndex} />
           )}
+
+          {cropping && <CropOverlay el={cropping} zoom={zoom} />}
 
           {/* 對齊輔助線 */}
           {state.showGuides &&

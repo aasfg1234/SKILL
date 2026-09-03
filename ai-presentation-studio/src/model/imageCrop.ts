@@ -44,6 +44,9 @@ export interface CropImageStyle {
   height: string;
   left: string;
   top: string;
+  /** 全域樣式有 img{max-width:100%}，放大時一定要解除，否則會被壓回框寬 */
+  maxWidth: 'none';
+  maxHeight: 'none';
   objectFit: ImageFit;
   display: 'block';
 }
@@ -66,6 +69,8 @@ export function cropImageStyle(
       height: '100%',
       left: '0%',
       top: '0%',
+      maxWidth: 'none',
+      maxHeight: 'none',
       objectFit: fit,
       display: 'block',
     };
@@ -77,6 +82,8 @@ export function cropImageStyle(
     height: percent(100 / c.h),
     left: percent((-c.x / c.w) * 100),
     top: percent((-c.y / c.h) * 100),
+    maxWidth: 'none',
+    maxHeight: 'none',
     objectFit: 'fill',
     display: 'block',
   };

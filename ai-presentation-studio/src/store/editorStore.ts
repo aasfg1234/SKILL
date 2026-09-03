@@ -89,6 +89,8 @@ export interface EditorState {
   tool: ToolId;
   /** 圖形工具目前要畫哪一種基本圖形 */
   shapeKind: ShapeKind;
+  /** 正在拖框裁切的圖片元件；null 代表沒有在裁切 */
+  croppingId: string | null;
   /** 鎖定工具：連續新增同一種元素，不會自動跳回選取 */
   toolLocked: boolean;
   zoom: number;
@@ -147,6 +149,7 @@ function initialState(): EditorState {
     selectedIds: [],
     tool: 'select',
     shapeKind: 'triangle',
+    croppingId: null,
     toolLocked: false,
     zoom: 0.4,
     fitToWindow: true,
@@ -353,6 +356,17 @@ class EditorStore {
     this.set({ tool });
   }
 
+  /** 進入拖框裁切。只選這一個元件，避免同時被拖曳搬動。 */
+  startCrop(elementId: string): void {
+    this.endTransaction();
+    this.set({ croppingId: elementId, selectedIds: [elementId], editingTextId: null });
+  }
+
+  stopCrop(): void {
+    this.endTransaction();
+    this.set({ croppingId: null });
+  }
+
   /** 選了哪一種基本圖形，就同時切到圖形工具。 */
   setShapeKind(shapeKind: ShapeKind): void {
     this.set({ shapeKind, tool: 'shape' });
@@ -465,6 +479,7 @@ class EditorStore {
   }
 
   selectSlide(slideId: string, mode: SlideSelectMode = 'replace'): void {
+    if (this.state.croppingId) this.stopCrop();
     if (!this.state.presentation.slides.some((s) => s.id === slideId)) return;
     this.endTransaction();
     const allIds = this.state.presentation.slides.map((s) => s.id);
@@ -823,7 +838,7 @@ class EditorStore {
 
   clearSelection(): void {
     this.endTransaction();
-    this.set({ selectedIds: [], editingTextId: null });
+    this.set({ selectedIds: [], editingTextId: null, croppingId: null });
   }
 
   addElement(element: SlideElement, slideId?: string): void {

@@ -44,6 +44,13 @@ describe('裁切後的圖片樣式', () => {
     expect(style.left).toBe('-50%');
   });
 
+  it('裁切時要解除寬高上限，不然會被全域的 max-width:100% 壓回去', () => {
+    const style = cropImageStyle({ x: 0.5, y: 0, w: 0.5, h: 1 }, 'cover');
+
+    expect(style.maxWidth).toBe('none');
+    expect(style.maxHeight).toBe('none');
+  });
+
   it('裁切時圖片一律拉伸填滿，不再另外留白', () => {
     const style = cropImageStyle({ x: 0, y: 0.25, w: 1, h: 0.5 }, 'contain');
 

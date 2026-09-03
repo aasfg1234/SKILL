@@ -1146,6 +1146,16 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
           <Field label="圓角">
             <NumberInput value={el.radius} min={0} onChange={(v) => update({ radius: Math.max(0, v) })} suffix="px" />
           </Field>
+          <button
+            type="button"
+            className="tool-btn w-full justify-center"
+            style={{ background: 'var(--color-panel-2)', border: '1px solid var(--color-line)' }}
+            disabled={!el.src}
+            onClick={() => editorStore.startCrop(el.id)}
+          >
+            <Icon name="grid" size={14} />
+            在畫布上拖框裁切
+          </button>
           <CropFields
             crop={el.crop}
             onChange={(crop) => update({ crop })}
