@@ -3,6 +3,8 @@ import type { AIComponentElement, SlideElement } from '../model/types';
 import { formatListLines, normalizeListStyle } from '../model/textList';
 import { isCoveredCell, mergeCovering } from '../model/table';
 import { buildChartSvg } from '../model/chartDraw';
+import { buildLineSvg, buildShapeSvg } from '../model/shapes';
+import { cropImageStyle } from '../model/imageCrop';
 
 /**
  * 元素 → HTML 片段。
@@ -121,7 +123,13 @@ export function renderElementToHtml(el: SlideElement): string {
         'word-break': 'break-word',
       });
       if (normalizeListStyle(el.listStyle) === 'none') {
-        return `<div class="aps-el aps-text" style="${style}">${escapeHtml(el.text)}</div>`;
+        const plain = formatListLines(el.text, 'none')
+          .map(
+            (line) =>
+              `<div style="padding-left:${line.level * 1.6}em">${escapeHtml(line.text) || '&nbsp;'}</div>`,
+          )
+          .join('');
+        return `<div class="aps-el aps-text" style="${style}">${plain}</div>`;
       }
       const justify =
         el.align === 'center' ? 'center' : el.align === 'right' ? 'flex-end' : 'flex-start';
@@ -130,7 +138,8 @@ export function renderElementToHtml(el: SlideElement): string {
           const marker = line.marker
             ? `<span style="flex:0 0 auto;opacity:.75">${escapeHtml(line.marker)}</span>`
             : '';
-          return `<div style="display:flex;gap:.5em;justify-content:${justify}">${marker}<span style="flex:0 1 auto">${escapeHtml(line.text) || '&nbsp;'}</span></div>`;
+          const indent = line.level > 0 ? `padding-left:${line.level * 1.6}em;` : '';
+          return `<div style="display:flex;gap:.5em;${indent}justify-content:${justify}">${marker}<span style="flex:0 1 auto">${escapeHtml(line.text) || '&nbsp;'}</span></div>`;
         })
         .join('');
       return `<div class="aps-el aps-text" style="${style}">${lines}</div>`;
@@ -195,18 +204,28 @@ export function renderElementToHtml(el: SlideElement): string {
       return `<div class="aps-el aps-ellipse" style="${style}"></div>`;
     }
     case 'line': {
-      const outer = styleString({
-        ...boxStyle(el),
-        display: 'flex',
-        'align-items': 'center',
+      const outer = styleString(boxStyle(el));
+      const svg = buildLineSvg({
+        width: el.width,
+        height: el.height,
+        stroke: el.stroke,
+        strokeWidth: el.strokeWidth,
+        arrowStart: el.arrowStart,
+        arrowEnd: el.arrowEnd,
       });
-      const inner = styleString({
-        width: '100%',
-        height: `${Math.max(1, el.strokeWidth)}px`,
-        background: el.stroke,
-        'border-radius': `${Math.max(1, el.strokeWidth) / 2}px`,
+      return `<div class="aps-el aps-line" style="${outer}">${svg}</div>`;
+    }
+    case 'shape': {
+      const outer = styleString(boxStyle(el));
+      const svg = buildShapeSvg({
+        shape: el.shape,
+        width: el.width,
+        height: el.height,
+        fill: el.fill,
+        stroke: el.stroke,
+        strokeWidth: el.strokeWidth,
       });
-      return `<div class="aps-el aps-line" style="${outer}"><div style="${inner}"></div></div>`;
+      return `<div class="aps-el aps-shape" style="${outer}">${svg}</div>`;
     }
     case 'image': {
       const src = sanitizeImageSrc(el.src);
@@ -218,11 +237,15 @@ export function renderElementToHtml(el: SlideElement): string {
       if (!src) {
         return `<div class="aps-el aps-image aps-image-empty" style="${style}"></div>`;
       }
+      const crop = cropImageStyle(el.crop, el.fit);
       const imgStyle = styleString({
-        width: '100%',
-        height: '100%',
-        'object-fit': el.fit,
-        display: 'block',
+        position: crop.position,
+        width: crop.width,
+        height: crop.height,
+        left: crop.left,
+        top: crop.top,
+        'object-fit': crop.objectFit,
+        display: crop.display,
       });
       return `<div class="aps-el aps-image" style="${style}"><img src="${escapeHtml(src)}" alt="${escapeHtml(el.alt)}" style="${imgStyle}" /></div>`;
     }

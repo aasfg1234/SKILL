@@ -22,6 +22,9 @@ import {
 } from '../model/table';
 import { FONT_CHOICES, fontIdOfStack, fontStackOf } from '../lib/fonts';
 import { masterKindForSlide } from '../model/master';
+import { SHAPE_KINDS, SHAPE_LABELS, type ShapeKind } from '../model/shapes';
+import { normalizeCrop } from '../model/imageCrop';
+import type { ImageCrop } from '../model/types';
 import {
   CHART_TYPES,
   insertSeriesRow,
@@ -207,6 +210,24 @@ function SlideInspector() {
             />
           </Field>
         </div>
+        <label className="flex items-center gap-2 text-[11.5px] text-ink-2">
+          <input
+            type="checkbox"
+            checked={state.presentation.settings.showSlideNumbers === true}
+            onChange={(e) => editorStore.updateSettings({ showSlideNumbers: e.target.checked })}
+          />
+          自動顯示頁碼
+        </label>
+        {state.presentation.settings.showSlideNumbers === true && (
+          <label className="flex items-center gap-2 text-[11.5px] text-ink-2">
+            <input
+              type="checkbox"
+              checked={state.presentation.settings.hideNumberOnCover === true}
+              onChange={(e) => editorStore.updateSettings({ hideNumberOnCover: e.target.checked })}
+            />
+            封面不顯示頁碼
+          </label>
+        )}
       </Section>
 
       <Section
@@ -247,6 +268,16 @@ function SlideInspector() {
               onChange={(e) => editorStore.updateSlide(slide.id, { useMasterBackground: e.target.checked })}
             />
             使用母片背景
+          </label>
+        )}
+        {!state.masterMode && (
+          <label className="flex items-center gap-2 text-[11.5px] text-ink-2">
+            <input
+              type="checkbox"
+              checked={slide.hidden === true}
+              onChange={() => editorStore.toggleSlideHidden(slide.id)}
+            />
+            播放與匯出時跳過這一頁
           </label>
         )}
         <Field label="背景色">
@@ -1025,8 +1056,23 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
         </Section>
       )}
 
-      {!multi && (el.type === 'rect' || el.type === 'ellipse') && (
+      {!multi && (el.type === 'rect' || el.type === 'ellipse' || el.type === 'shape') && (
         <Section title="圖形樣式" icon="square">
+          {el.type === 'shape' && (
+            <Field label="形狀">
+              <select
+                className="field-input"
+                value={el.shape}
+                onChange={(e) => update({ shape: e.target.value as ShapeKind })}
+              >
+                {SHAPE_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {SHAPE_LABELS[kind]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field label="填色">
             <ColorInput value={el.fill} onChange={(v) => update({ fill: v })} />
           </Field>
@@ -1054,6 +1100,22 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
           <Field label="粗細">
             <NumberInput value={el.strokeWidth} min={1} onChange={(v) => update({ strokeWidth: Math.max(1, v) })} suffix="px" />
           </Field>
+          <div className="flex gap-1.5">
+            <ToggleButton
+              active={el.arrowStart === true}
+              onClick={() => update({ arrowStart: !el.arrowStart })}
+              title="左端箭頭"
+            >
+              左箭頭
+            </ToggleButton>
+            <ToggleButton
+              active={el.arrowEnd === true}
+              onClick={() => update({ arrowEnd: !el.arrowEnd })}
+              title="右端箭頭"
+            >
+              右箭頭
+            </ToggleButton>
+          </div>
         </Section>
       )}
 
@@ -1084,10 +1146,93 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
           <Field label="圓角">
             <NumberInput value={el.radius} min={0} onChange={(v) => update({ radius: Math.max(0, v) })} suffix="px" />
           </Field>
+          <CropFields
+            crop={el.crop}
+            onChange={(crop) => update({ crop })}
+          />
         </Section>
       )}
 
       {!multi && el.type === 'ai_component' && <AiSettings el={el} />}
+    </>
+  );
+}
+
+/**
+ * 圖片裁切的四個邊。
+ *
+ * 用「各邊要裁掉多少百分比」來填，比直接填 x/y/寬/高 好懂：
+ * 使用者想的是「左邊切掉一點」，不是「保留 0.1 到 0.9」。
+ */
+function CropFields({
+  crop,
+  onChange,
+}: {
+  crop: ImageCrop | undefined;
+  onChange: (crop: ImageCrop | undefined) => void;
+}) {
+  const current = normalizeCrop(crop);
+  const left = Math.round(current.x * 100);
+  const top = Math.round(current.y * 100);
+  const right = Math.round((1 - current.x - current.w) * 100);
+  const bottom = Math.round((1 - current.y - current.h) * 100);
+
+  const apply = (next: { left: number; top: number; right: number; bottom: number }) => {
+    const x = Math.min(95, Math.max(0, next.left)) / 100;
+    const y = Math.min(95, Math.max(0, next.top)) / 100;
+    const w = 1 - x - Math.min(95, Math.max(0, next.right)) / 100;
+    const h = 1 - y - Math.min(95, Math.max(0, next.bottom)) / 100;
+    if (w <= 0.02 || h <= 0.02) return;
+    const value = { x, y, w, h };
+    onChange(x === 0 && y === 0 && w === 1 && h === 1 ? undefined : value);
+  };
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="左邊裁掉">
+          <NumberInput
+            value={left}
+            min={0}
+            onChange={(v) => apply({ left: v, top, right, bottom })}
+            suffix="%"
+          />
+        </Field>
+        <Field label="右邊裁掉">
+          <NumberInput
+            value={right}
+            min={0}
+            onChange={(v) => apply({ left, top, right: v, bottom })}
+            suffix="%"
+          />
+        </Field>
+        <Field label="上面裁掉">
+          <NumberInput
+            value={top}
+            min={0}
+            onChange={(v) => apply({ left, top: v, right, bottom })}
+            suffix="%"
+          />
+        </Field>
+        <Field label="下面裁掉">
+          <NumberInput
+            value={bottom}
+            min={0}
+            onChange={(v) => apply({ left, top, right, bottom: v })}
+            suffix="%"
+          />
+        </Field>
+      </div>
+      {(left > 0 || top > 0 || right > 0 || bottom > 0) && (
+        <button
+          type="button"
+          className="tool-btn w-full justify-center"
+          style={{ background: 'var(--color-panel-2)', border: '1px solid var(--color-line)' }}
+          onClick={() => onChange(undefined)}
+        >
+          取消裁切
+        </button>
+      )}
     </>
   );
 }

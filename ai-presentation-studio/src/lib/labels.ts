@@ -40,6 +40,7 @@ export const ELEMENT_TYPE_LABELS: Record<ElementType, string> = {
   rect: '矩形',
   ellipse: '圓形',
   line: '線條',
+  shape: '圖形',
   image: '圖片',
   table: '表格',
   chart: '圖表',

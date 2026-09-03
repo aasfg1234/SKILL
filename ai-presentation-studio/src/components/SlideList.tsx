@@ -6,6 +6,7 @@ import { Icon } from './Icon';
 import { LAYER } from '../lib/layers';
 import { dragAutoScrollSpeed } from '../lib/dragAutoScroll';
 import { effectiveSlideBackground, masterForSlide } from '../model/master';
+import { SlideNumber } from './SlideNumber';
 
 const THUMB_WIDTH = 176;
 
@@ -42,7 +43,16 @@ function Thumbnail({ slide, index }: { slide: Slide; index: number }) {
         {sortByZ(slide.elements).map((el) => (
           <ElementView key={el.id} el={el} mode="thumb" />
         ))}
+        <SlideNumber presentation={state.presentation} index={index} />
       </div>
+      {slide.hidden === true && (
+        <div
+          className="absolute inset-0 flex items-center justify-center text-[10px] font-medium"
+          style={{ background: 'rgba(255,255,255,.72)', color: 'var(--color-ink-3)' }}
+        >
+          播放時跳過
+        </div>
+      )}
     </div>
   );
 }

@@ -6,14 +6,20 @@ import { LAYER } from '../lib/layers';
 import { buildPresenterView, previewStepFromKey } from '../model/presenter';
 import { elementsForPresenting } from '../model/presenting';
 import { effectiveSlideBackground, masterForSlide } from '../model/master';
+import { isSlideHidden } from '../model/deck';
+import { SlideNumber } from './SlideNumber';
 
 /** 播放模式：只顯示投影片，不顯示任何編輯器介面。 */
 export function PreviewOverlay() {
   const state = useEditorState();
   const { width, height } = state.presentation.settings;
-  const slides = state.presentation.slides;
+  // 被隱藏的投影片不播；previewIndex 數的是沒隱藏的第幾張。
+  const shown = state.presentation.slides
+    .map((item, index) => ({ slide: item, index }))
+    .filter((entry) => !isSlideHidden(entry.slide));
+  const slides = shown.map((entry) => entry.slide);
   const slide = slides[state.previewIndex] ?? slides[0];
-  const slideIndex = Math.max(0, slides.indexOf(slide));
+  const slideIndex = shown[slides.indexOf(slide)]?.index ?? 0;
   const master = slide ? masterForSlide(state.presentation, slide, slideIndex) : undefined;
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [scale, setScale] = useState(0.5);
@@ -153,6 +159,7 @@ export function PreviewOverlay() {
           ).map((el) => (
             <ElementView key={el.id} el={el} mode="present" />
           ))}
+          <SlideNumber presentation={state.presentation} index={slideIndex} />
         </div>
       </div>
 

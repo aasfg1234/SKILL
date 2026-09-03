@@ -10,6 +10,7 @@ import {
   type LineElement,
   type Presentation,
   type RectElement,
+  type ShapeElement,
   type ChartElement,
   type ChartSeries,
   type Slide,
@@ -224,6 +225,17 @@ export function createLineElement(init: BaseInit & Partial<LineElement> = {}): L
     type: 'line',
     stroke: init.stroke ?? '#111827',
     strokeWidth: init.strokeWidth ?? 4,
+  };
+}
+
+export function createShapeElement(init: BaseInit & Partial<ShapeElement> = {}): ShapeElement {
+  return {
+    ...base('shape', init, 320, 280),
+    type: 'shape',
+    shape: init.shape ?? 'triangle',
+    fill: init.fill ?? '#E0E7FF',
+    stroke: init.stroke ?? '#4F46E5',
+    strokeWidth: init.strokeWidth ?? 0,
   };
 }
 

@@ -3,6 +3,7 @@ import type { Presentation } from '../model/types';
 import { renderElementToHtml, sortedElements } from './renderElement';
 import { elementsForPresenting } from '../model/presenting';
 import { effectiveSlideBackground, masterForSlide } from '../model/master';
+import { isSlideHidden, slideNumberFor } from '../model/deck';
 
 /**
  * Presentation Specification → 單一自足 HTML 檔。
@@ -435,8 +436,12 @@ export function renderPresentationToHtml(
   options: RenderOptions = {},
 ): string {
   const { showControls = true, includeBranding = true } = options;
-  const slidesHtml = presentation.slides
-    .map((slide, i) => {
+  // 被隱藏的投影片完全不進匯出檔，頁碼與總頁數也都只算沒隱藏的。
+  const shown = presentation.slides
+    .map((slide, index) => ({ slide, index }))
+    .filter((entry) => !isSlideHidden(entry.slide));
+  const slidesHtml = shown
+    .map(({ slide, index: i }, position) => {
       const master = masterForSlide(presentation, slide, i);
       const masterBody = sortedElements(
         elementsForPresenting(
@@ -451,10 +456,16 @@ export function renderPresentationToHtml(
       )
         .map(renderElementToHtml)
         .join('\n      ');
-      const body = [masterBody, slideBody].filter(Boolean).join('\n      ');
-      return `    <section class="aps-slide${i === 0 ? ' is-active' : ''}" id="aps-slide-${escapeHtml(
+      const numberBox = slideNumberFor(presentation, i);
+      const pageNumber = numberBox
+        ? `<div class="aps-page-number" style="position:absolute;right:${numberBox.right}px;bottom:${numberBox.bottom}px;font-size:${numberBox.fontSize}px;color:${escapeHtml(
+            numberBox.color,
+          )};font-family:${escapeHtml(numberBox.fontFamily)}">${escapeHtml(numberBox.text)}</div>`
+        : '';
+      const body = [masterBody, slideBody, pageNumber].filter(Boolean).join('\n      ');
+      return `    <section class="aps-slide${position === 0 ? ' is-active' : ''}" id="aps-slide-${escapeHtml(
         slide.id,
-      )}" data-index="${i + 1}" aria-label="${escapeHtml(slide.title)}" data-title="${escapeHtml(
+      )}" data-index="${position + 1}" aria-label="${escapeHtml(slide.title)}" data-title="${escapeHtml(
         slide.title,
       )}" data-notes="${escapeHtml(slide.notes)}" style="background:${escapeHtml(
         effectiveSlideBackground(presentation, slide, i),
@@ -472,7 +483,7 @@ export function renderPresentationToHtml(
       <button id="aps-full" type="button">F 全螢幕</button>
       <button id="aps-presenter" type="button">N 講者檢視</button>
     </div>
-    <div id="aps-counter">第 1 / ${presentation.slides.length} 頁</div>
+    <div id="aps-counter">第 1 / ${shown.length} 頁</div>
   </div>
   <div id="aps-progress"></div>
   <div id="aps-hint">點畫面下一頁　← → ↑ ↓ 換頁　F 全螢幕　N 講者檢視　Esc 離開全螢幕</div>
@@ -511,11 +522,7 @@ ${slidesHtml}
 </div>
 ${controls}
 <script>
-${navigationScript(
-  presentation.slides.length,
-  presentation.settings.width,
-  presentation.settings.height,
-)}
+${navigationScript(shown.length, presentation.settings.width, presentation.settings.height)}
 </${''}script>
 </body>
 </html>

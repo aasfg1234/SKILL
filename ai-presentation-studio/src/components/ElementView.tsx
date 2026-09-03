@@ -3,6 +3,8 @@ import { sanitizeAiOutput, sanitizeImageSrc } from '../model/sanitize';
 import type { AIComponentElement, SlideElement } from '../model/types';
 import { AI_KIND_LABELS, AI_STATUS_ICON, AI_STATUS_LABELS } from '../lib/labels';
 import { formatListLines, normalizeListStyle } from '../model/textList';
+import { buildLineSvg, buildShapeSvg } from '../model/shapes';
+import { cropImageStyle } from '../model/imageCrop';
 import { isCoveredCell, mergeCovering } from '../model/table';
 import { buildChartSvg } from '../model/chartDraw';
 
@@ -156,13 +158,18 @@ export function ElementView({ el, mode }: { el: SlideElement; mode: ViewMode }) 
           }}
         >
           {normalizeListStyle(el.listStyle) === 'none'
-            ? el.text
+            ? formatListLines(el.text, 'none').map((line, index) => (
+                <div key={index} style={{ paddingLeft: `${line.level * 1.6}em` }}>
+                  {line.text || ' '}
+                </div>
+              ))
             : formatListLines(el.text, el.listStyle).map((line, index) => (
                 <div
                   key={index}
                   style={{
                     display: 'flex',
                     gap: '0.5em',
+                    paddingLeft: `${line.level * 1.6}em`,
                     textAlign: el.align,
                     justifyContent:
                       el.align === 'center'
@@ -259,27 +266,42 @@ export function ElementView({ el, mode }: { el: SlideElement; mode: ViewMode }) 
       );
     case 'line':
       return (
-        <div style={{ ...style, display: 'flex', alignItems: 'center' }}>
-          <div
-            style={{
-              width: '100%',
-              height: Math.max(1, el.strokeWidth),
-              background: el.stroke,
-              borderRadius: Math.max(1, el.strokeWidth) / 2,
-            }}
-          />
-        </div>
+        <div
+          style={style}
+          dangerouslySetInnerHTML={{
+            __html: buildLineSvg({
+              width: el.width,
+              height: el.height,
+              stroke: el.stroke,
+              strokeWidth: el.strokeWidth,
+              arrowStart: el.arrowStart,
+              arrowEnd: el.arrowEnd,
+            }),
+          }}
+        />
+      );
+    case 'shape':
+      return (
+        <div
+          style={style}
+          dangerouslySetInnerHTML={{
+            __html: buildShapeSvg({
+              shape: el.shape,
+              width: el.width,
+              height: el.height,
+              fill: el.fill,
+              stroke: el.stroke,
+              strokeWidth: el.strokeWidth,
+            }),
+          }}
+        />
       );
     case 'image': {
       const src = sanitizeImageSrc(el.src);
       return (
         <div style={{ ...style, overflow: 'hidden', borderRadius: el.radius }}>
           {src ? (
-            <img
-              src={src}
-              alt={el.alt}
-              style={{ width: '100%', height: '100%', objectFit: el.fit, display: 'block' }}
-            />
+            <img src={src} alt={el.alt} style={cropImageStyle(el.crop, el.fit)} />
           ) : (
             <div
               className="flex h-full w-full items-center justify-center border-2 border-dashed"

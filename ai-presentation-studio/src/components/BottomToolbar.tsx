@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { editorStore, useEditorState, type ToolId } from '../store/editorStore';
 import { Icon } from './Icon';
+import { SHAPE_KINDS, SHAPE_LABELS } from '../model/shapes';
 import { LAYER } from '../lib/layers';
 
 const TOOLS: Array<{ id: ToolId; label: string; icon: string; hint: string }> = [
@@ -20,6 +21,8 @@ export function BottomToolbar() {
     ? state.presentation.masters?.[state.masterMode]
     : state.presentation.slides.find((slide) => slide.id === state.currentSlideId);
   const [arrangeOpen, setArrangeOpen] = useState(false);
+  const [shapeOpen, setShapeOpen] = useState(false);
+  const shapeRef = useRef<HTMLDivElement | null>(null);
   const arrangeRef = useRef<HTMLDivElement | null>(null);
   const editingGroupName = useRef(false);
   const selectedElements = (currentSlide?.elements ?? []).filter((el) =>
@@ -36,6 +39,15 @@ export function BottomToolbar() {
   const singleGroupName = singleGroupId
     ? selectedElements.find((el) => el.groupId === singleGroupId)?.groupName ?? ''
     : '';
+
+  useEffect(() => {
+    if (!shapeOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!shapeRef.current?.contains(event.target as Node)) setShapeOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [shapeOpen]);
 
   useEffect(() => {
     if (!arrangeOpen) return;
@@ -70,6 +82,44 @@ export function BottomToolbar() {
           {tool.label}
         </button>
       ))}
+
+      <div className="relative" ref={shapeRef}>
+        <button
+          type="button"
+          className="tool-btn"
+          data-active={state.tool === 'shape'}
+          title="三角形、菱形、箭頭、星形、對話框"
+          onClick={() => setShapeOpen((open) => !open)}
+        >
+          <Icon name="square" size={15} />
+          基本圖形
+        </button>
+        {shapeOpen && (
+          <div
+            className="absolute bottom-full left-0 mb-1 w-32 overflow-hidden rounded-md border shadow-lg"
+            style={{
+              borderColor: 'var(--color-line)',
+              background: 'var(--color-panel)',
+              zIndex: LAYER.menu,
+            }}
+          >
+            {SHAPE_KINDS.map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-[var(--color-panel-2)]"
+                data-active={state.shapeKind === kind}
+                onClick={() => {
+                  editorStore.setShapeKind(kind);
+                  setShapeOpen(false);
+                }}
+              >
+                {SHAPE_LABELS[kind]}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <button
         type="button"

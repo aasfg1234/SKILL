@@ -6,6 +6,7 @@ import {
   createImageElement,
   createLineElement,
   createRectElement,
+  createShapeElement,
   createChartElement,
   createTableElement,
   createTextElement,
@@ -20,6 +21,9 @@ import {
   unmergeCells,
 } from '../model/table';
 import { editorStore, useEditorState, type ToolId } from '../store/editorStore';
+import { changeIndent } from '../model/textList';
+import { readCaret, writeCaret } from '../lib/caret';
+import { SlideNumber } from './SlideNumber';
 import { pickImageFile } from '../lib/files';
 import {
   fitImageIntoSlide,
@@ -1044,6 +1048,14 @@ export function Canvas() {
       case 'ellipse':
         editorStore.addElement(createEllipseElement(placement(360, 240)));
         break;
+      case 'shape':
+        editorStore.addElement(
+          createShapeElement({
+            ...placement(320, 280),
+            shape: editorStore.getState().shapeKind,
+          }),
+        );
+        break;
       case 'line':
         editorStore.addElement(createLineElement({ ...placement(600, 12), height: 8 }));
         break;
@@ -1326,6 +1338,13 @@ export function Canvas() {
               </div>
             </div>
           ))}
+
+          {!state.masterMode && (
+            <SlideNumber
+              presentation={state.presentation}
+              index={state.presentation.slides.findIndex((item) => item.id === slide?.id)}
+            />
+          )}
 
           {/* 對齊輔助線 */}
           {state.showGuides &&
@@ -1847,6 +1866,31 @@ export function Canvas() {
                 if (e.key === 'Escape') {
                   editorStore.endTransaction();
                   editorStore.setEditingText(null);
+                  return;
+                }
+                // Tab 調整這一行的縮排，不要讓焦點跳走。
+                if (e.key === 'Tab') {
+                  e.preventDefault();
+                  const root = e.currentTarget;
+                  const text = root.innerText.replace(/\r\n?/g, '\n');
+                  const caret = readCaret(root);
+                  const next = changeIndent(
+                    text,
+                    caret?.start ?? text.length,
+                    caret?.end ?? text.length,
+                    e.shiftKey ? -1 : 1,
+                  );
+                  if (next.text === text) return;
+                  root.innerText = next.text;
+                  writeCaret(root, next.selectionStart, next.selectionEnd);
+                  const grown = growTextHeight(editing, root.scrollHeight, height);
+                  editorStore.updateElement(
+                    editing.id,
+                    grown === editing.height
+                      ? { text: next.text }
+                      : { text: next.text, height: grown },
+                    { transient: true },
+                  );
                 }
               }}
               style={{

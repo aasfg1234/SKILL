@@ -8,6 +8,8 @@ import {
   topZ,
 } from '../model/factory';
 import { createDemoPresentation } from '../model/demo';
+import type { ShapeKind } from '../model/shapes';
+import { visibleSlides } from '../model/deck';
 import { buildLayoutElements } from '../model/layouts';
 import { migratePresentationFonts } from '../model/migrate';
 import { replaceInPresentation, type SearchOptions } from '../model/search';
@@ -46,6 +48,7 @@ export type ToolId =
   | 'rect'
   | 'ellipse'
   | 'line'
+  | 'shape'
   | 'image'
   | 'table'
   | 'chart'
@@ -84,6 +87,8 @@ export interface EditorState {
   selectedSlideIds: string[];
   selectedIds: string[];
   tool: ToolId;
+  /** 圖形工具目前要畫哪一種基本圖形 */
+  shapeKind: ShapeKind;
   /** 鎖定工具：連續新增同一種元素，不會自動跳回選取 */
   toolLocked: boolean;
   zoom: number;
@@ -141,6 +146,7 @@ function initialState(): EditorState {
     selectedSlideIds: [currentSlideId],
     selectedIds: [],
     tool: 'select',
+    shapeKind: 'triangle',
     toolLocked: false,
     zoom: 0.4,
     fitToWindow: true,
@@ -347,6 +353,18 @@ class EditorStore {
     this.set({ tool });
   }
 
+  /** 選了哪一種基本圖形，就同時切到圖形工具。 */
+  setShapeKind(shapeKind: ShapeKind): void {
+    this.set({ shapeKind, tool: 'shape' });
+  }
+
+  /** 這一頁要不要在播放與匯出時跳過。 */
+  toggleSlideHidden(slideId: string): void {
+    const slide = this.state.presentation.slides.find((item) => item.id === slideId);
+    if (!slide) return;
+    this.updateSlide(slideId, { hidden: !slide.hidden });
+  }
+
   setToolLocked(locked: boolean): void {
     this.set({ toolLocked: locked });
   }
@@ -400,17 +418,15 @@ class EditorStore {
   }
 
   enterPreview(index?: number): void {
+    // previewIndex 數的是「沒有被隱藏的第幾張」，不是原本的陣列位置。
+    const shown = visibleSlides(this.state.presentation);
     const idx =
-      index ??
-      Math.max(
-        0,
-        this.state.presentation.slides.findIndex((s) => s.id === this.state.currentSlideId),
-      );
+      index ?? Math.max(0, shown.findIndex((s) => s.id === this.state.currentSlideId));
     this.set({ previewMode: true, previewIndex: idx });
   }
 
   exitPreview(): void {
-    const slide = this.state.presentation.slides[this.state.previewIndex];
+    const slide = visibleSlides(this.state.presentation)[this.state.previewIndex];
     this.set({
       previewMode: false,
       ...(slide ? { currentSlideId: slide.id } : {}),
@@ -418,7 +434,7 @@ class EditorStore {
   }
 
   setPreviewIndex(index: number): void {
-    const max = this.state.presentation.slides.length - 1;
+    const max = visibleSlides(this.state.presentation).length - 1;
     this.set({ previewIndex: Math.min(max, Math.max(0, index)) });
   }
 

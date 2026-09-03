@@ -5,6 +5,8 @@
  * 編輯器、驗證器、HTML Renderer、AI Handoff 都以此為基礎。
  */
 
+import type { ShapeKind } from './shapes';
+
 export const PRESENTATION_PROTOCOL = 'ai-presentation/v1' as const;
 export const PATCH_PROTOCOL = 'ai-presentation-patch/v1' as const;
 export const SPEC_VERSION = '1.0.0' as const;
@@ -39,6 +41,7 @@ export type ElementType =
   | 'rect'
   | 'ellipse'
   | 'line'
+  | 'shape'
   | 'image'
   | 'table'
   | 'chart'
@@ -133,9 +136,30 @@ export interface LineElement extends BaseElement {
   type: 'line';
   stroke: string;
   strokeWidth: number;
+  /** 左端要不要畫箭頭 */
+  arrowStart?: boolean;
+  /** 右端要不要畫箭頭 */
+  arrowEnd?: boolean;
+}
+
+/** 三角形、菱形、箭頭、星形、對話框等基本圖形。 */
+export interface ShapeElement extends BaseElement {
+  type: 'shape';
+  shape: ShapeKind;
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
 }
 
 export type ImageFit = 'contain' | 'cover' | 'fill';
+
+/** 要保留的原圖範圍，四個數字都是 0 到 1 的比例。 */
+export interface ImageCrop {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 export interface ImageElement extends BaseElement {
   type: 'image';
@@ -144,6 +168,8 @@ export interface ImageElement extends BaseElement {
   alt: string;
   fit: ImageFit;
   radius: number;
+  /** 只保留原圖的一塊；沒有這個欄位代表整張都要 */
+  crop?: ImageCrop;
 }
 
 export type AIComponentKind =
@@ -221,6 +247,7 @@ export type SlideElement =
   | RectElement
   | EllipseElement
   | LineElement
+  | ShapeElement
   | ImageElement
   | AIComponentElement;
 
@@ -236,6 +263,8 @@ export interface Slide {
   useMasterBackground?: boolean;
   /** 這張投影片使用封面母片或內容母片。 */
   masterKind?: MasterKind;
+  /** true 時保留這一頁，但播放與匯出都會跳過。 */
+  hidden?: boolean;
   notes: string;
   elements: SlideElement[];
 }
@@ -284,6 +313,10 @@ export interface PresentationSettings {
   aspectRatio: string;
   /** 播放與匯出時，隱藏還沒交回結果的 AI 元件，避免觀眾看到佔位框 */
   hideIncompleteAi?: boolean;
+  /** 在每張投影片右下角自動標頁碼 */
+  showSlideNumbers?: boolean;
+  /** 使用封面母片的投影片不顯示頁碼，但仍然佔一個號碼 */
+  hideNumberOnCover?: boolean;
 }
 
 export interface Presentation {
