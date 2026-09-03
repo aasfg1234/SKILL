@@ -9,12 +9,12 @@
 
 ## 最新 Session
 
-- AI：GPT
-- Session：027
+- AI：Claude
+- Session：028
 - 日期：2026-09-03
 - 狀態：完成
 
-最新 Session 檔案：`AI_HISTORY/2026-09-03_027_GPT.md`
+最新 Session 檔案：`AI_HISTORY/2026-09-03_028_Claude.md`
 
 Git：分支 `claude/ai-presentation-studio-mvp-xwt57g`，工作區乾淨。
 
@@ -24,7 +24,7 @@ Git：分支 `claude/ai-presentation-studio-mvp-xwt57g`，工作區乾淨。
 
 AI Presentation Studio 單機版 MVP 可用，核心流程全通。
 
-- 394 項測試全過，型別檢查無錯誤，正式建置成功
+- 400 項測試全過，型別檢查無錯誤，正式建置成功
 - `npm run build` 產出可離線雙擊的 `dist/AI-Presentation-Studio.html`
 - 已實作：畫布編輯、封面與內容母片、滾輪與方向鍵換頁、投影片列表與拖曳排序、拖曳時自動上下捲動、左右側欄收合、屬性面板、AI 任務面板、播放模式、群組、對齊、均分、吸附、復原／重作
 - 已實作：右鍵選單、Ctrl+滾輪縮放、空白鍵平移畫布、破壞性動作確認對話框
@@ -90,6 +90,9 @@ Session 002 第 7 節建議功能的其餘項目，清單見 `2026-09-02_005_Cla
 母片元素無法在個別投影片隱藏（Session 017）。
 
 ---
+
+
+Session 028：「全 AI 生成」「AI 生成單頁」的入口已經改成外部 AI 交接版本（下載 zip、貼給外部 AI、匯入結果），**不是**瀏覽器裡直接生成的 Mock AI。Mock AI 的程式碼還在，但已經不是使用者實際看到的入口。
 
 ## 下一步
 

@@ -42,7 +42,7 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   return <label className="flex items-center gap-2 text-[11.5px] text-ink-2"><input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />{label}</label>;
 }
 
-function SettingsForm({ form, errors, onChange }: { form: FullAiForm; errors: Record<string, string>; onChange: (next: FullAiForm) => void }) {
+export function SettingsForm({ form, errors, onChange }: { form: FullAiForm; errors: Record<string, string>; onChange: (next: FullAiForm) => void }) {
   const set = <K extends keyof FullAiForm>(key: K, value: FullAiForm[K]) => onChange({ ...form, [key]: value });
   return (
     <div className="space-y-5">
@@ -101,7 +101,7 @@ function SettingsForm({ form, errors, onChange }: { form: FullAiForm; errors: Re
   );
 }
 
-function OutlineEditor({ outline, busyId, onChange, onRegenerate }: { outline: PresentationOutline; busyId: string | null; onChange: (outline: PresentationOutline) => void; onRegenerate: (slide: OutlineSlide, index: number) => void }) {
+export function OutlineEditor({ outline, busyId, onChange, onRegenerate, showRegenerate = true }: { outline: PresentationOutline; busyId: string | null; onChange: (outline: PresentationOutline) => void; onRegenerate: (slide: OutlineSlide, index: number) => void; showRegenerate?: boolean }) {
   const [dragId, setDragId] = useState<string | null>(null);
   return (
     <div className="space-y-3">
@@ -117,7 +117,7 @@ function OutlineEditor({ outline, busyId, onChange, onRegenerate }: { outline: P
               <strong className="text-[12px]">第 {index + 1} 頁</strong>
               <span className="flex-1 text-[10.5px] text-ink-3">{slide.visualSuggestion}</span>
               <button type="button" className="tool-btn px-2" onClick={() => onChange(updateOutlineSlide(outline, slide.id, { locked: !slide.locked }))}>{slide.locked ? '解除鎖定' : '鎖定'}</button>
-              <button type="button" className="tool-btn px-2" disabled={slide.locked || busyId === slide.id} onClick={() => onRegenerate(slide, index)}>{busyId === slide.id ? '產生中…' : '重新產生'}</button>
+              {showRegenerate && <button type="button" className="tool-btn px-2" disabled={slide.locked || busyId === slide.id} onClick={() => onRegenerate(slide, index)}>{busyId === slide.id ? '產生中…' : '重新產生'}</button>}
               <button type="button" className="tool-btn px-2" disabled={outline.slides.length <= 1} onClick={() => onChange(deleteOutlineSlide(outline, slide.id))}>刪除</button>
             </div>
             <div className="grid grid-cols-[1fr_160px] gap-2">

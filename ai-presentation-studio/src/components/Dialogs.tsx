@@ -12,8 +12,8 @@ import { FONT_CHOICES, fontIdOfStack, fontStackOf } from '../lib/fonts';
 import { libraryUsageBytes } from '../lib/library';
 import { PRESET_SIZES, aspectRatioLabel } from '../model/presenting';
 import { createDarkTheme, createDefaultTheme } from '../model/factory';
-import { FullAiDialog } from './FullAiDialog';
-import { SingleSlideAiDialog } from './SingleSlideAiDialog';
+import { ExternalFullAiDialog } from './ExternalFullAiDialog';
+import { ExternalSingleSlideAiDialog } from './ExternalSingleSlideAiDialog';
 
 function Modal({
   title,
@@ -849,9 +849,9 @@ export function Dialogs() {
     case 'layout':
       return <LayoutDialog afterSlideId={dialog.afterSlideId} />;
     case 'full-ai':
-      return <FullAiDialog />;
+      return <ExternalFullAiDialog />;
     case 'single-ai':
-      return <SingleSlideAiDialog />;
+      return <ExternalSingleSlideAiDialog />;
     case 'confirm':
       return (
         <ConfirmDialog
