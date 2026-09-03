@@ -18,7 +18,7 @@ import type { Presentation } from '../model/types';
 import { validatePresentation } from '../model/validator';
 import { editorStore, useEditorState } from '../store/editorStore';
 import { Icon } from './Icon';
-import { OutlineEditor, SettingsForm } from './FullAiDialog';
+import { OutlineEditor, SettingsForm } from './FullAiFormParts';
 
 type Phase = 'settings' | 'outline-waiting' | 'outline' | 'presentation-waiting' | 'result';
 

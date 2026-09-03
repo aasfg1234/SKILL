@@ -10,11 +10,11 @@
 ## 最新 Session
 
 - AI：Claude
-- Session：028
+- Session：029
 - 日期：2026-09-03
 - 狀態：完成
 
-最新 Session 檔案：`AI_HISTORY/2026-09-03_028_Claude.md`
+最新 Session 檔案：`AI_HISTORY/2026-09-03_029_Claude.md`
 
 Git：分支 `claude/ai-presentation-studio-mvp-xwt57g`，工作區乾淨。
 
@@ -24,7 +24,7 @@ Git：分支 `claude/ai-presentation-studio-mvp-xwt57g`，工作區乾淨。
 
 AI Presentation Studio 單機版 MVP 可用，核心流程全通。
 
-- 400 項測試全過，型別檢查無錯誤，正式建置成功
+- 388 項測試全過，型別檢查無錯誤，正式建置成功
 - `npm run build` 產出可離線雙擊的 `dist/AI-Presentation-Studio.html`
 - 已實作：畫布編輯、封面與內容母片、滾輪與方向鍵換頁、投影片列表與拖曳排序、拖曳時自動上下捲動、左右側欄收合、屬性面板、AI 任務面板、播放模式、群組、對齊、均分、吸附、復原／重作
 - 已實作：右鍵選單、Ctrl+滾輪縮放、空白鍵平移畫布、破壞性動作確認對話框
@@ -84,7 +84,7 @@ Session 027 加入全 AI 生成與 AI 生成單頁，並強制檢查 AI 輸出�
 
 Session 002 第 7 節建議功能的其餘項目，清單見 `2026-09-02_005_Claude.md` 第 6 節。
 
-目前 AI 只用 Mock AI，尚未串接真實 AI 服務。
+「全 AI 生成」與「AI 生成單頁」都是外部交接：下載壓縮檔、交給外部 AI、把結果匯入回編輯器。編輯器本身不打任何 AI API。假生成（Mock AI）的程式碼已在 Session 029 移除，不要再加回來當入口。
 
 另有兩個已知小問題：側欄收合狀態重新載入後會恢復展開（Session 016）；
 母片元素無法在個別投影片隱藏（Session 017）。
@@ -92,7 +92,10 @@ Session 002 第 7 節建議功能的其餘項目，清單見 `2026-09-02_005_Cla
 ---
 
 
-Session 028：「全 AI 生成」「AI 生成單頁」的入口已經改成外部 AI 交接版本（下載 zip、貼給外部 AI、匯入結果），**不是**瀏覽器裡直接生成的 Mock AI。Mock AI 的程式碼還在，但已經不是使用者實際看到的入口。
+Session 028：「全 AI 生成」「AI 生成單頁」的入口已經改成外部 AI 交接版本（下載 zip、貼給外部 AI、匯入結果）。
+Session 029：刪除 Mock AI 的程式碼（`ai/mockProvider.ts`、舊版
+`FullAiDialog.tsx`／`SingleSlideAiDialog.tsx` 本體），`SettingsForm`／
+`OutlineEditor` 搬到新檔 `components/FullAiFormParts.tsx` 供外部交接版本重用。
 
 ## 下一步
 
@@ -188,6 +191,7 @@ Session 028：「全 AI 生成」「AI 生成單頁」的入口已經改成外�
 72. **畫布的貼上監聽器遇到輸入框就放手。** 判斷條件是 `e.defaultPrevented`、正在編輯文字、事件來源是 `input`／`textarea`／`select`／`contenteditable`。**新增任何「貼上就自動做某件事」的功能時，這三道判斷都要留著**，否則貼一次會同時做兩件事（例如圖表欄位會多冒出一個表格）。
 73. **沒有 Tab 的文字不轉表格。** `parsePastedTable()` 只在文字含 Tab 時回傳表格，貼普通文字不應該冒出表格。上限 50 列 × 20 欄。
 74. **畫布上所有「外框類」的東西都必須設 `zIndex: LAYER.canvasOverlay`。** 元素外層固定是 `zIndex:1`，而 `z-index:1` 一定畫在 `auto` 上面。忘了設就會被大面積元素蓋掉（Session 022 修過選取框、對齊輔助線、框選矩形）。不要把元素外層改成更大的數字。
+75. **Mock AI（假生成）已經刪除，不要再加回來當「全 AI 生成」「AI 生成單頁」的入口。** 兩個入口一律是「下載壓縮檔 → 交給外部 AI → 匯入結果」，跟 AI 元件既有的 `匯出 AI Package`／`匯入 AI 完成結果` 是同一種模式，實作在 `src/ai/handoffPackage.ts`。`SettingsForm`／`OutlineEditor` 這兩個表單元件放在 `src/components/FullAiFormParts.tsx`，供 `ExternalFullAiDialog.tsx` 重用，不要搬回舊的 `FullAiDialog.tsx`（已刪除）。
 
 ---
 
