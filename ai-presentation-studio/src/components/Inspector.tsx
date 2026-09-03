@@ -1156,10 +1156,7 @@ function ElementInspector({ elements }: { elements: SlideElement[] }) {
             <Icon name="grid" size={14} />
             在畫布上拖框裁切
           </button>
-          <CropFields
-            crop={el.crop}
-            onChange={(crop) => update({ crop })}
-          />
+          <CropFields crop={el.crop} onChange={(crop) => editorStore.setCrop(el.id, crop)} />
         </Section>
       )}
 

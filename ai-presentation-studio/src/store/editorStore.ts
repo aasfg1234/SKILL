@@ -9,6 +9,9 @@ import {
 } from '../model/factory';
 import { createDemoPresentation } from '../model/demo';
 import type { ShapeKind } from '../model/shapes';
+import type { ImageCrop } from '../model/types';
+import { normalizeCrop } from '../model/imageCrop';
+import { croppedBox, imageRectOf } from '../model/cropDrag';
 import { visibleSlides } from '../model/deck';
 import { moveLayer, type LayerPlace } from '../model/layerList';
 import { buildLayoutElements } from '../model/layouts';
@@ -365,6 +368,48 @@ class EditorStore {
 
   stopCrop(): void {
     this.endTransaction();
+    this.set({ croppingId: null });
+  }
+
+  /**
+   * 用數字改裁切範圍。元件框跟著縮放，畫面上的圖片不會變形，
+   * 跟畫布上拖框裁切的結果一致。
+   */
+  setCrop(elementId: string, next: ImageCrop | undefined): void {
+    const slide = this.state.masterMode
+      ? this.state.presentation.masters?.[this.state.masterMode]
+      : this.state.presentation.slides.find((s) => s.id === this.state.currentSlideId);
+    const el = slide?.elements.find((item) => item.id === elementId);
+    if (!el || el.type !== 'image') return;
+
+    const target = normalizeCrop(next);
+    const image = imageRectOf(
+      { x: el.x, y: el.y, width: el.width, height: el.height },
+      el.crop,
+    );
+
+    this.applyCrop(elementId, target, croppedBox(image, target));
+  }
+
+  /**
+   * 完成裁切：同時更新保留範圍與元件框。
+   *
+   * 元件框會縮成使用者框起來的那一塊，畫面上看到的東西才不會變形，
+   * 也不會跳回原圖尺寸。
+   */
+  applyCrop(
+    elementId: string,
+    crop: ImageCrop,
+    box: { x: number; y: number; width: number; height: number },
+  ): void {
+    const full = crop.x === 0 && crop.y === 0 && crop.w === 1 && crop.h === 1;
+    this.updateElement(elementId, {
+      crop: full ? undefined : crop,
+      x: box.x,
+      y: box.y,
+      width: Math.max(1, box.width),
+      height: Math.max(1, box.height),
+    });
     this.set({ croppingId: null });
   }
 

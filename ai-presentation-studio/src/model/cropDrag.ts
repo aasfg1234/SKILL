@@ -1,4 +1,5 @@
 import type { ImageCrop } from './types';
+import { normalizeCrop } from './imageCrop';
 
 /**
  * 在畫布上拖曳裁切框。
@@ -20,6 +21,46 @@ function round(value: number): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+export interface CropBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * 把整張原圖攤開：算出「如果整張圖都顯示，它會在哪裡、多大」。
+ *
+ * 這樣裁切時看到的圖跟裁切前的比例一模一樣，亮框就正好是目前的元件框。
+ */
+export function imageRectOf(box: CropBox, crop: ImageCrop | undefined | null): CropBox {
+  const c = normalizeCrop(crop);
+  const width = box.width / c.w;
+  const height = box.height / c.h;
+  return {
+    x: box.x - c.x * width,
+    y: box.y - c.y * height,
+    width,
+    height,
+  };
+}
+
+/**
+ * 完成裁切後元件要縮成的新框。
+ *
+ * 元件框直接變成使用者框起來的那一塊，所以畫面上看到的東西不會變形，
+ * 也不會跳回原圖尺寸。這是 imageRectOf() 的反運算。
+ */
+export function croppedBox(image: CropBox, crop: ImageCrop | undefined | null): CropBox {
+  const c = normalizeCrop(crop);
+  return {
+    x: Math.round(image.x + c.x * image.width),
+    y: Math.round(image.y + c.y * image.height),
+    width: Math.max(1, Math.round(c.w * image.width)),
+    height: Math.max(1, Math.round(c.h * image.height)),
+  };
 }
 
 /** 整個框一起搬，大小不變，碰到圖片邊界就停住。 */

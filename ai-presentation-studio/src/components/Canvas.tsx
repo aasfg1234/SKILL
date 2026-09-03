@@ -1214,7 +1214,9 @@ export function Canvas() {
       : null;
   const resizeTargets = single ? [single] : singleGroupId ? selected : [];
 
+  // 視覺上的小方塊維持 9px，但可以點的範圍放大到 20px，才不會難點。
   const handleSize = 9 / zoom;
+  const handleHit = 20 / zoom;
   const allHandles: Array<{ id: Handle; x: number; y: number; cursor: string }> = resizeBounds
     ? [
         { id: 'nw', x: resizeBounds.x, y: resizeBounds.y, cursor: 'nwse-resize' },
@@ -1367,7 +1369,8 @@ export function Canvas() {
                   cursor: el.locked ? 'not-allowed' : 'move',
                 }}
               />
-              {!(el.type === 'text' && state.editingTextId === el.id) && (
+              {!(el.type === 'text' && state.editingTextId === el.id) &&
+                !(el.type === 'image' && state.croppingId === el.id) && (
                 <div style={{ pointerEvents: 'none' }}>
                   <ElementView el={el} mode="edit" />
                 </div>
@@ -1577,18 +1580,31 @@ export function Canvas() {
               }
               style={{
                 position: 'absolute',
-                left: h.x - handleSize / 2,
-                top: h.y - handleSize / 2,
-                width: handleSize,
-                height: handleSize,
-                background: '#fff',
-                border: `${1.5 / zoom}px solid var(--color-brand)`,
-                borderRadius: 2 / zoom,
+                left: h.x - handleHit / 2,
+                top: h.y - handleHit / 2,
+                width: handleHit,
+                height: handleHit,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'transparent',
+                border: 'none',
                 padding: 0,
                 cursor: h.cursor,
+                zIndex: LAYER.canvasOverlay,
                 pointerEvents: resizeTargets.some((el) => el.locked) ? 'none' : 'auto',
               }}
-            />
+            >
+              <span
+                style={{
+                  width: handleSize,
+                  height: handleSize,
+                  background: '#fff',
+                  border: `${1.5 / zoom}px solid var(--color-brand)`,
+                  borderRadius: 2 / zoom,
+                }}
+              />
+            </button>
           ))}
 
           {/* 表格的欄線：拖曳可調整欄寬 */}
@@ -1902,6 +1918,7 @@ export function Canvas() {
                 background: 'rgba(255,255,255,.92)',
                 outline: `${2 / zoom}px solid var(--color-brand)`,
                 overflow: 'hidden',
+                cursor: 'text',
                 zIndex: LAYER.canvasOverlay,
               }}
             >

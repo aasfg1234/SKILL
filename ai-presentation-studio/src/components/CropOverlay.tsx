@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { editorStore } from '../store/editorStore';
 import type { ImageElement } from '../model/types';
-import { CROP_HANDLES, moveCrop, resizeCrop, type CropHandle } from '../model/cropDrag';
+import {
+  CROP_HANDLES,
+  croppedBox,
+  imageRectOf,
+  moveCrop,
+  resizeCrop,
+  type CropHandle,
+} from '../model/cropDrag';
 import { normalizeCrop } from '../model/imageCrop';
 import { sanitizeImageSrc } from '../model/sanitize';
 import { LAYER } from '../lib/layers';
@@ -9,11 +16,11 @@ import { LAYER } from '../lib/layers';
 /**
  * 畫布上的拖框裁切。
  *
- * 進入裁切時，整張原圖會被拉滿元件框並調暗，
- * 亮的那一塊就是會保留的範圍。使用者直接拖那一塊或它的八個控制點。
+ * 進入裁切時，整張原圖會照「目前這一塊放大的比例」攤開來並調暗，
+ * 亮的那一塊就是目前的元件框。使用者拖亮框或八個控制點決定要留哪一塊。
  *
- * 因為原圖是「拉滿元件框」顯示的，所以畫面上移動幾個像素，
- * 換算成比例就是「除以元件寬高」，不需要知道原圖真正的尺寸。
+ * 按下完成之後，元件會縮成剛剛框起來的大小，
+ * 所以畫面上看到的東西完全不會變形，也不會跳回原圖尺寸。
  */
 
 const HANDLE_CURSOR: Record<CropHandle, string> = {
@@ -35,21 +42,17 @@ interface DragState {
 }
 
 export function CropOverlay({ el, zoom }: { el: ImageElement; zoom: number }) {
-  const crop = normalizeCrop(el.crop);
+  // 整張原圖攤開後在投影片上的位置與大小；進入裁切時算一次就固定。
+  const [image] = useState(() =>
+    imageRectOf({ x: el.x, y: el.y, width: el.width, height: el.height }, el.crop),
+  );
+  const [crop, setCrop] = useState(() => normalizeCrop(el.crop));
   const drag = useRef<DragState | null>(null);
-  const [entryCrop] = useState(() => normalizeCrop(el.crop));
   const src = sanitizeImageSrc(el.src);
 
-  const finish = () => editorStore.stopCrop();
+  const finish = () => editorStore.applyCrop(el.id, crop, croppedBox(image, crop));
 
-  const cancel = () => {
-    const back =
-      entryCrop.x === 0 && entryCrop.y === 0 && entryCrop.w === 1 && entryCrop.h === 1
-        ? undefined
-        : entryCrop;
-    editorStore.updateElement(el.id, { crop: back });
-    editorStore.stopCrop();
-  };
+  const cancel = () => editorStore.stopCrop();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -68,56 +71,54 @@ export function CropOverlay({ el, zoom }: { el: ImageElement; zoom: number }) {
 
   const start = (e: React.PointerEvent, handle: CropHandle | 'move') => {
     e.stopPropagation();
-    e.preventDefault();
-    drag.current = {
-      handle,
-      startX: e.clientX,
-      startY: e.clientY,
-      origin: { ...crop },
-    };
-    editorStore.beginTransaction();
+    drag.current = { handle, startX: e.clientX, startY: e.clientY, origin: { ...crop } };
     (e.target as Element).setPointerCapture?.(e.pointerId);
   };
 
   const move = (e: React.PointerEvent) => {
     const current = drag.current;
     if (!current) return;
-    const dx = (e.clientX - current.startX) / zoom / el.width;
-    const dy = (e.clientY - current.startY) / zoom / el.height;
-    const next =
+    const dx = (e.clientX - current.startX) / zoom / image.width;
+    const dy = (e.clientY - current.startY) / zoom / image.height;
+    setCrop(
       current.handle === 'move'
         ? moveCrop(current.origin, dx, dy)
-        : resizeCrop(current.origin, current.handle, dx, dy);
-    editorStore.updateElement(el.id, { crop: next }, { transient: true });
+        : resizeCrop(current.origin, current.handle, dx, dy),
+    );
   };
 
   const end = () => {
-    if (!drag.current) return;
     drag.current = null;
-    editorStore.endTransaction();
   };
 
-  const box = { width: el.width, height: el.height };
-  const rect = {
-    left: crop.x * box.width,
-    top: crop.y * box.height,
-    width: crop.w * box.width,
-    height: crop.h * box.height,
+  // 抓到指標的元素自己收 move 與 up，跟畫布上其他控制點同一種寫法。
+  const dragProps = (handle: CropHandle | 'move') => ({
+    onPointerDown: (e: React.PointerEvent) => start(e, handle),
+    onPointerMove: move,
+    onPointerUp: end,
+    onPointerCancel: end,
+  });
+
+  const frame = {
+    left: crop.x * image.width,
+    top: crop.y * image.height,
+    width: crop.w * image.width,
+    height: crop.h * image.height,
   };
-  const handleSize = 14 / zoom;
+  const handleSize = 16 / zoom;
 
   return (
     <div
       style={{
         position: 'absolute',
-        left: el.x,
-        top: el.y,
-        width: box.width,
-        height: box.height,
+        left: image.x,
+        top: image.y,
+        width: image.width,
+        height: image.height,
         zIndex: LAYER.canvasOverlay,
-        cursor: 'default',
         touchAction: 'none',
       }}
+      // 外層再收一次：move() 一律從按下去的起點重算，重複觸發不會有副作用。
       onPointerMove={move}
       onPointerUp={end}
       onPointerCancel={end}
@@ -132,8 +133,10 @@ export function CropOverlay({ el, zoom }: { el: ImageElement; zoom: number }) {
             inset: 0,
             width: '100%',
             height: '100%',
+            maxWidth: 'none',
+            maxHeight: 'none',
             objectFit: 'fill',
-            opacity: 0.35,
+            opacity: 0.3,
             pointerEvents: 'none',
           }}
         />
@@ -142,16 +145,16 @@ export function CropOverlay({ el, zoom }: { el: ImageElement; zoom: number }) {
       <div
         style={{
           position: 'absolute',
-          left: rect.left,
-          top: rect.top,
-          width: rect.width,
-          height: rect.height,
+          left: frame.left,
+          top: frame.top,
+          width: frame.width,
+          height: frame.height,
           overflow: 'hidden',
           outline: `${2 / zoom}px solid var(--color-brand)`,
           cursor: 'move',
           touchAction: 'none',
         }}
-        onPointerDown={(e) => start(e, 'move')}
+        {...dragProps('move')}
       >
         {src && (
           <img
@@ -160,10 +163,10 @@ export function CropOverlay({ el, zoom }: { el: ImageElement; zoom: number }) {
             draggable={false}
             style={{
               position: 'absolute',
-              left: -rect.left,
-              top: -rect.top,
-              width: box.width,
-              height: box.height,
+              left: -frame.left,
+              top: -frame.top,
+              width: image.width,
+              height: image.height,
               maxWidth: 'none',
               maxHeight: 'none',
               objectFit: 'fill',
@@ -174,43 +177,51 @@ export function CropOverlay({ el, zoom }: { el: ImageElement; zoom: number }) {
       </div>
 
       {CROP_HANDLES.map((handle) => {
-        const left =
-          handle.includes('w')
-            ? rect.left
-            : handle.includes('e')
-              ? rect.left + rect.width
-              : rect.left + rect.width / 2;
-        const top =
-          handle.includes('n')
-            ? rect.top
-            : handle.includes('s')
-              ? rect.top + rect.height
-              : rect.top + rect.height / 2;
+        const left = handle.includes('w')
+          ? frame.left
+          : handle.includes('e')
+            ? frame.left + frame.width
+            : frame.left + frame.width / 2;
+        const top = handle.includes('n')
+          ? frame.top
+          : handle.includes('s')
+            ? frame.top + frame.height
+            : frame.top + frame.height / 2;
         return (
           <div
             key={handle}
-            onPointerDown={(e) => start(e, handle)}
+            {...dragProps(handle)}
             style={{
               position: 'absolute',
               left: left - handleSize / 2,
               top: top - handleSize / 2,
               width: handleSize,
               height: handleSize,
-              background: 'var(--color-brand)',
-              border: `${1.5 / zoom}px solid #fff`,
-              borderRadius: 2 / zoom,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               cursor: HANDLE_CURSOR[handle],
               touchAction: 'none',
             }}
-          />
+          >
+            <div
+              style={{
+                width: 10 / zoom,
+                height: 10 / zoom,
+                background: 'var(--color-brand)',
+                border: `${1.5 / zoom}px solid #fff`,
+                borderRadius: 2 / zoom,
+              }}
+            />
+          </div>
         );
       })}
 
       <div
         style={{
           position: 'absolute',
-          left: 0,
-          top: -40 / zoom,
+          left: frame.left,
+          top: frame.top - 40 / zoom,
           display: 'flex',
           gap: 8 / zoom,
           transform: `scale(${1 / zoom})`,
