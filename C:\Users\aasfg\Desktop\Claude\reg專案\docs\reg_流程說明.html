@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>內規修訂助理（reg）流程說明</title>
+<style>
+  :root{
+    --ink:#1f2933; --muted:#52606d; --line:#d9e2ec; --bg:#ffffff; --soft:#f5f7fa;
+    --human:#b45309; --human-bg:#fff7ed; --prog:#1d4ed8; --prog-bg:#eff6ff; --llm:#047857; --llm-bg:#ecfdf5;
+    --warn:#b91c1c; --warn-bg:#fef2f2;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Microsoft JhengHei","Noto Sans TC","PingFang TC",system-ui,sans-serif;font-size:15px;line-height:1.75}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 80px}
+  h1{font-size:28px;margin:0 0 6px}
+  h2{font-size:21px;margin:44px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--line)}
+  h3{font-size:17px;margin:24px 0 8px}
+  p{margin:8px 0}
+  .lead{color:var(--muted);font-size:15px}
+  .roles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}
+  .role{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--soft)}
+  .role h3{margin:0 0 6px;font-size:16px}
+  .role.h{border-color:var(--human);background:var(--human-bg)} .role.h h3{color:var(--human)}
+  .role.p{border-color:var(--prog);background:var(--prog-bg)} .role.p h3{color:var(--prog)}
+  .role.l{border-color:var(--llm);background:var(--llm-bg)} .role.l h3{color:var(--llm)}
+  .tag{display:inline-block;font-size:12px;font-weight:700;padding:1px 8px;border-radius:999px;margin-right:6px;vertical-align:middle}
+  .tag.h{background:var(--human-bg);color:var(--human);border:1px solid var(--human)}
+  .tag.p{background:var(--prog-bg);color:var(--prog);border:1px solid var(--prog)}
+  .tag.l{background:var(--llm-bg);color:var(--llm);border:1px solid var(--llm)}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 10px;vertical-align:top;text-align:left}
+  th{background:var(--soft);font-weight:700;white-space:nowrap}
+  td.h{background:var(--human-bg)} td.p{background:var(--prog-bg)} td.l{background:var(--llm-bg)}
+  .step{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:16px 0}
+  .step h3{margin-top:0}
+  .step .out{color:var(--muted);font-size:13.5px;margin-top:8px}
+  .note{border-left:4px solid var(--warn);background:var(--warn-bg);padding:10px 14px;margin:14px 0;border-radius:0 8px 8px 0}
+  .tip{border-left:4px solid var(--prog);background:var(--prog-bg);padding:10px 14px;margin:14px 0;border-radius:0 8px 8px 0}
+  code{background:var(--soft);padding:1px 6px;border-radius:4px;font-family:Consolas,"Courier New",monospace;font-size:13px}
+  ul{margin:6px 0 6px 20px} li{margin:3px 0}
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0}
+  .flow .box{border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--soft);font-size:13.5px}
+  .flow .box.h{border-color:var(--human);background:var(--human-bg)}
+  .flow .box.p{border-color:var(--prog);background:var(--prog-bg)}
+  .flow .box.l{border-color:var(--llm);background:var(--llm-bg)}
+  .flow .arrow{color:var(--muted)}
+  .toc{columns:2;column-gap:32px;font-size:14px;margin:10px 0 0}
+  .toc a{color:var(--prog);text-decoration:none} .toc a:hover{text-decoration:underline}
+  .small{font-size:13px;color:var(--muted)}
+  @media (max-width:760px){.roles{grid-template-columns:1fr}.toc{columns:1}}
+  @media print{body{font-size:12.5px}.wrap{padding:0}h2{break-after:avoid}.step,table{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>內規修訂助理（reg）流程說明</h1>
+<p class="lead">這一份講三件事：整條流程裡<strong>人要做什麼、程式做什麼、LLM 做什麼</strong>；程式用哪些方法比對；LLM 用什麼方法篩選。適用單本與多本批次。2026-09-18 版，對應 main 分支 <code>f09431e</code>。</p>
+
+<div class="toc">
+  <a href="#roles">一、三個角色的分工</a><br>
+  <a href="#flow">二、流程一覽</a><br>
+  <a href="#steps">三、逐步說明</a><br>
+  <a href="#compare">四、程式比對的方法</a><br>
+  <a href="#llm">五、LLM 篩選的方法</a><br>
+  <a href="#accept">六、驗收：三個問題與跳過兩類</a><br>
+  <a href="#files">七、產出檔放在哪</a><br>
+  <a href="#rules">八、幾條不能忘的原則</a>
+</div>
+
+<h2 id="roles">一、三個角色的分工</h2>
+<div class="roles">
+  <div class="role h"><h3>人（法遵／承辦）</h3>
+    <ul><li>把舊版、新版放進資料夾</li><li>確認配對清單</li><li>在決定表填「要改嗎、改成什麼」</li><li>看報告、看提醒</li><li>拿定稿去會簽</li></ul>
+    <p class="small">凡是「要不要改、改成什麼」的決定，只有人能做。程式與 LLM 都不會代填。</p></div>
+  <div class="role p"><h3>程式（Python，不用裝套件）</h3>
+    <ul><li>逐字比對新舊版，做對照表與紅字全文</li><li>找連帶條文（四路比對）</li><li>十項條文檢查</li><li>把決定寫進 Word 開追蹤修訂</li><li>終比對驗收三問</li><li>每一步留提醒與指紋</li></ul>
+    <p class="small">結果可重複、可查證。程式只列候選，不做判斷。</p></div>
+  <div class="role l"><h3>LLM（Claude／SPADE）</h3>
+    <ul><li>讀審查包，逐筆判「要不要改」並給分數與理由</li><li>逐筆解釋候選為什麼相關、建議怎麼改</li><li>複核程式查不到的三件事：條文矛盾、有無逾越母法、修正理由草擬</li></ul>
+    <p class="small">只讀候選集，不讀全文。每一個主張都要標條號與信心程度。</p></div>
+</div>
+
+<h2 id="flow">二、流程一覽</h2>
+<div class="flow">
+  <span class="box h">放檔案</span><span class="arrow">→</span>
+  <span class="box p">配對</span><span class="arrow">→</span>
+  <span class="box h">確認清單</span><span class="arrow">→</span>
+  <span class="box p">Step 1 比對</span><span class="arrow">→</span>
+  <span class="box p">Step 1.6 條文檢查</span><span class="arrow">→</span>
+  <span class="box p">Step 2 找連帶</span><span class="arrow">→</span>
+  <span class="box l">Step 1.5 LLM 審查</span><span class="arrow">→</span>
+  <span class="box l">Step 3 說明理由</span><span class="arrow">→</span>
+  <span class="box h">填決定表</span><span class="arrow">→</span>
+  <span class="box p">apply 寫進 Word</span><span class="arrow">→</span>
+  <span class="box p">finalize 三問</span><span class="arrow">→</span>
+  <span class="box l">Step 4 LLM 複核</span><span class="arrow">→</span>
+  <span class="box h">會簽</span>
+</div>
+<p class="small">單本用 <code>compare → review-pack → review-import → apply → finalize</code>；多本用 <code>配對 → 開始 → batch-review-pack → batch-review-import → batch-apply → batch-finalize</code>，多本會多算「跨本連帶」。</p>
+
+<h2 id="steps">三、逐步說明</h2>
+
+<div class="step">
+  <h3>Step −1　放檔案與配對</h3>
+  <p><span class="tag h">人</span>把舊版放 <code>匯入/舊版/</code>、新草稿放 <code>匯入/新版/</code>（檔名一樣或只差版本字都可以）。</p>
+  <p><span class="tag p">程式</span><code>配對</code> 用檔名配對、去掉「_v2」「(修訂)」這類版本字，寫出 <code>規章清單.csv</code>；多個候選配不起來的列標「未配對」。</p>
+  <p><span class="tag h">人</span>打開清單確認配對對不對；不對就改清單。</p>
+  <p><span class="tag p">程式</span><code>開始</code> 檢查清單有沒有過期（檔案換了、多了、少了），上一輪產出自動歸檔到 <code>系統檔案/歷次/</code>，再逐本跑 Step 1。</p>
+</div>
+
+<div class="step">
+  <h3>Step 0　環境檢查</h3>
+  <p><span class="tag p">程式</span>檢查 Python 版本、標準函式庫、有沒有 python-docx（只影響 Word 版對照表能不能產）。沒有的東西會印「未檢查」，不會假裝有。</p>
+</div>
+
+<div class="step">
+  <h3>Step 0.5　款目重編與交叉引用（改過款、目才需要）</h3>
+  <p><span class="tag p">程式</span>重編款、目的編號；找出全文裡「第五條第二款」「前項」這類引用，判斷改號之後有沒有指錯，可機械改寫的才改寫，指到已刪除的、外部法規的一律只報不改。條號本身不重編（法制慣例保留條號並註記「（刪除）」）。</p>
+  <p><span class="tag h">人</span>看「無法判定」清單逐筆處理。</p>
+</div>
+
+<div class="step">
+  <h3>Step 1　精確比對</h3>
+  <p><span class="tag p">程式</span>讀兩版全文（Word 追蹤修訂當「已接受」讀、表格逐格逐段讀），逐段對齊、逐字比對。產出：修正對照表（xlsx＋公文用 docx）、標註版全文（docx，紅字底線刪除線）、條文檢查報告、候選明細、提醒。</p>
+  <p>異動分五類：<strong>新增、刪除、修改</strong>算實質異動；<strong>編號調整</strong>（只有條號動）、<strong>僅字形／空白差異</strong>（全半形、空格）另外報，不混進同一個數字。條號整批位移會發警告：所有「第X條」引用都要複核。</p>
+  <p><span class="tag h">人</span>看畫面上的「提醒 N 則」，一則都不能跳過：自動編號讀不到、追蹤修訂、新舊放反、文字方塊不比對……</p>
+  <p class="out">產出在 <code>審閱文件/</code>；連帶決定表在 <code>填寫表單/</code>。</p>
+</div>
+
+<div class="step">
+  <h3>Step 1.2　帶入正式基準（有規格包時）</h3>
+  <p><span class="tag p">程式</span>有 diff-cut 產的正式規格包時，每一段對回正式的條文 ID；規格包的引用表用來算「哪些條文引用了這次改的條」（規格包連帶複核）。</p>
+</div>
+
+<div class="step">
+  <h3>Step 1.6　十項條文檢查</h3>
+  <p><span class="tag p">程式</span>責任用語變更（應↔得）、數值期間變更、施行日期、條號完整（重複、跳號，含第一條與最後一條）、定義用語、外部法規引用（只列不判）、待補殘留、格式一致、用語混用、附件。每一項三態：<strong>通過／未檢查／有問題</strong>。</p>
+  <div class="note">「未檢查」不等於通過。缺舊版、文件沒有「第X條」、條號對不上，這幾項就會是未檢查，人要自己看。</div>
+</div>
+
+<div class="step">
+  <h3>Step 2　找連帶條文（最重要的一步）</h3>
+  <p><span class="tag p">程式</span>對每一處異動，用四路比對到全文找「別的地方是不是也寫了同一件事、這次漏改」（方法見第四節），合成<strong>連帶決定表</strong>。每一列寫來源（哪一路抓到的）、分數、命中的詞或句，讓人查得到為什麼。</p>
+  <p>多本時再加跨本：A 本改的段拿去 B 本找；B 本的規格包引用到 A 本改的那條也列出來。</p>
+</div>
+
+<div class="step">
+  <h3>Step 1.5　LLM 審查（review-pack → LLM 填表 → review-import）</h3>
+  <p><span class="tag p">程式</span><code>review-pack</code> 把每個候選打包成審查包（md）：異動段的舊文、新文（帶〔刪：〕〔加：〕）、前後文；候選段全文與前後文；要判的事。另附兩張空白表：AI候選判斷.csv、AI異動審查.csv。</p>
+  <p><span class="tag l">LLM</span>逐筆讀審查包，填判斷、分數、理由（規則見第五節）。</p>
+  <p><span class="tag p">程式</span><code>review-import</code> 驗格式（判斷字、分數範圍、判斷與分數是否對得上、理由有沒有該有的字），驗決定表的候選全文有沒有被手改過；通過才把 AI 三欄寫回決定表、產 <code>LLM審查報告.xlsx</code>。</p>
+  <p class="out">重跑 review-pack 不會洗掉已填的答案（改寫 .new.csv 並提醒）。</p>
+</div>
+
+<div class="step">
+  <h3>Step 3　LLM 說明理由與建議</h3>
+  <p><span class="tag l">LLM</span>對候選逐筆解釋「為什麼可能相關、建議怎麼改」：80 分以上逐筆展開；45～79 分且句首起列表；其餘只講數量。句子層級與文脈那兩路要看句分數與命中的那一句，不看整段分數。語意來源一樣要寫理由。</p>
+  <p><span class="tag l">LLM</span>同時把畫面上的「提醒 N 則」逐則唸出來，以 <code>提醒.txt</code> 為準（畫面會被洗掉）。</p>
+</div>
+
+<div class="step">
+  <h3>填決定表</h3>
+  <p><span class="tag h">人</span>用 Excel 開 <code>填寫表單/連帶決定表.csv</code>，逐列填「要改嗎」（改／刪除／不改）與「改成什麼」（改完的整段）。AI 三欄是參考，不是決定。候選全文那一欄不要改（程式靠它核對）。</p>
+</div>
+
+<div class="step">
+  <h3>apply　寫進 Word</h3>
+  <p><span class="tag p">程式</span>先核對草稿指紋（草稿中途被換就整支停）、草稿已含追蹤修訂就停；逐列跳到那一段核對原文，只動差異的字，開 Word 追蹤修訂（作者 reg）。產出定稿（帶修訂）、乾淨版（全接受）、套用報告，三份一起換名，不留半套。</p>
+  <p>改不到的列分兩類：<strong>程式做不到</strong>（找不到段、原文不符、範本鎖定欄位、段落含巢狀內容）畫面印 <code>[警告] 有 N 列程式沒改到</code>，finalize 會算成未改到；<strong>人自己選的</strong>（改成什麼跟原文一樣）不擋，只單獨報一行。</p>
+  <p><span class="tag h">人</span>看 <code>[警告]</code> 那幾列，在 Word 裡自己處理。</p>
+</div>
+
+<div class="step">
+  <h3>finalize　終比對與三問</h3>
+  <p><span class="tag p">程式</span>拿「原始草稿 → 套用後乾淨版」再比一次，回答三個問題（見第六節）。三個都是零才印「改好」，否則「還有 N 處要看，請勿送出」。多本時會用各本定稿重算跨本連帶，摘要寫「新候選 N（含跨本 M）」。</p>
+</div>
+
+<div class="step">
+  <h3>Step 4　LLM 複核（程式查不到的三件事）</h3>
+  <p><span class="tag l">LLM</span>只餵候選集，不餵全文：</p>
+  <ul>
+    <li><strong>條文間邏輯矛盾</strong>：同一件事兩處期限不同、一處應一處得、甲條說依乙條辦理但乙條沒有。</li>
+    <li><strong>是否逾越母法</strong>：對責任放寬、數值變更的條文，指出「要查證○○法第○條，因為……」。LLM 沒有查證母法的能力，只出查證清單，不下結論。</li>
+    <li><strong>修正理由草擬</strong>：對照表每一列的「修改依據／理由」草稿。</li>
+  </ul>
+  <p>每一筆標條號、標信心（明確有問題／疑似請人工確認／不確定），判斷不出來就寫不確定。</p>
+  <p><span class="tag h">人</span>確認後產出最終文件、公文初稿，拿去會簽。</p>
+</div>
+
+<h2 id="compare">四、程式比對的方法</h2>
+<p>從嚴到寬分四層，一層抓不到才用下一層。每一列候選都標明是哪一路抓到的，可以並列（例如「相似；語意」）。</p>
+
+<h3>第 1 層　精確比對（找差異）</h3>
+<table>
+  <tr><th>做法</th><th>說明</th></tr>
+  <tr><td>正規化</td><td>全半形、空白統一之後才比；顯示用的原文不動</td></tr>
+  <tr><td>段落對齊</td><td>Python 內建 difflib（比對兩串東西哪裡一樣、哪裡不一樣）；段落太多時改「帶狀對齊」只比對角線附近</td></tr>
+  <tr><td>字級標示</td><td>對到的段再比到字，畫出底線（加）、刪除線（刪）</td></tr>
+  <tr><td>分類</td><td>新增／刪除／修改／編號調整／僅字形空白差異</td></tr>
+</table>
+
+<h3>第 2 層　找連帶（都是比字，只是拿的塊不同）</h3>
+<table>
+  <tr><th>來源</th><th>拿什麼比什麼</th><th>門檻</th><th>補哪個死角</th></tr>
+  <tr><td>相似</td><td>改動段整段對全文每一段，比之前先剝條號</td><td>45 分</td><td>同一條抄到別章、小改幾個字</td></tr>
+  <tr><td>關鍵詞</td><td>只拿「這次改動的那幾個字」去全文找；片段本身也當一個詞，再切前綴後綴；太常見的詞不拿去搜</td><td>命中即列</td><td>整段不像、只有改動的概念在別處出現</td></tr>
+  <tr><td>關鍵詞（文脈）</td><td>一字之差（五→七）抽不到片段，或片段搜到零筆時，改拿改動處左右各四個字去搜</td><td>命中即列</td><td>數字改數字</td></tr>
+  <tr><td>相似（句）</td><td>改到的那一句對全文每一句</td><td>60 分</td><td>長段落只改一句，整段分數被稀釋</td></tr>
+  <tr><td>同義詞</td><td>先用可稽核的詞表把「保險費／應繳金額」換成同一個代表詞再比，表上寫是哪一組詞讓它配上</td><td>套在上面各路</td><td>用詞換掉</td></tr>
+  <tr><td>整條刪除</td><td>被刪那一條一字不差的孿生條也列出來，摘要標【整條刪除】</td><td>—</td><td>別章平行條文也該一起刪</td></tr>
+</table>
+
+<h3>第 3 層　跨本（多本批次）</h3>
+<table>
+  <tr><th>來源</th><th>做法</th></tr>
+  <tr><td>跨本／跨本（句）／跨本（文脈）</td><td>A 本改的段拿去 B 本，用同一套整段、關鍵詞、句子比</td></tr>
+  <tr><td>跨本引用</td><td>B 本規格包的引用表有引用到 A 本改的那條（有條號幾乎一定要看；只寫「依 A 本辦理」的只提醒）</td></tr>
+</table>
+
+<h3>第 4 層　語意（選配，需要 BGE-M3 模型）</h3>
+<p>前三層都是比字，死角是「講同一件事但用字不一樣」。語意比對用模型把每一句變成一串數字，講同一件事的句子數字接近，不管用字。</p>
+<table>
+  <tr><th>做法</th><th>說明</th></tr>
+  <tr><td>前處理</td><td>剝條號、切句、再正規化（跟字面比對同一套）</td></tr>
+  <tr><td>拿什麼比</td><td>「改到的那幾句」對全文每一段的每一句與整段，取最高分；「語意依據」欄寫是哪一句對上哪一句</td></tr>
+  <tr><td>三種分數</td><td>純語意 0.4（整句意思）＋關鍵詞 0.2（重要的詞有沒有對上）＋逐字 0.4（一個字一個字對）；BGE-M3 官方權重</td></tr>
+  <tr><td>門檻</td><td>三分數 0.70；只有純語意時 0.75（真資料校準：孿生條 0.86～0.93、相鄰條 0.72、其餘 0.62 以下）</td></tr>
+  <tr><td>全排名／粗篩</td><td>預設全排名（每個單位都算三種，不會漏，1,347 段約 13 分鐘）；設定「語意粗篩」填 N 可先用純語意排一遍只細算前 N 名（200 名約 7 分鐘，真檔上結果相同；40 名會漏「主題不同但講同一規定」的段）</td></tr>
+  <tr><td>限制</td><td>只能說「這句跟那句像，0.72 分」，說不出哪個詞對上；SPADE 上跑不了，要在有模型的電腦算完再併回</td></tr>
+</table>
+
+<h2 id="llm">五、LLM 篩選的方法</h2>
+
+<h3>審查包裡有什麼</h3>
+<ul>
+  <li><strong>異動段</strong>：舊文、新文（帶〔刪：〕〔加：〕）、前後文（有條就整條＋條外前後各一段；無條有款就整款；都沒有就前後各三段，最多前後各 15 段）</li>
+  <li><strong>候選段</strong>：全文與前後文；前後文裡若某段本身就是異動段或候選段，段首會標「※」</li>
+  <li><strong>要判的事</strong>：候選段要不要跟著改；異動段改完跟前後文有沒有矛盾、同條其他項有沒有該一起改卻沒改</li>
+  <li>單一候選太長時前後文自動縮到前後各三段並註明，不截原文；審查包依字數切檔（預設 60,000 字）</li>
+</ul>
+
+<h3>LLM 要填什麼</h3>
+<table>
+  <tr><th>表</th><th>判斷（三選一）</th><th>分數 0–10</th><th>理由要有的字</th></tr>
+  <tr><td>AI候選判斷.csv</td><td>建議修改／需再檢查／不用改</td><td>建議修改 ≥ 7；需再檢查 4～6；不用改 ≤ 3</td><td>建議修改要含「改成」；需再檢查要含「請確認」或「請問」</td></tr>
+  <tr><td>AI異動審查.csv</td><td>建議修改／需再檢查／沒問題</td><td>同上</td><td>同上</td></tr>
+</table>
+<p>判斷與分數對不上、理由缺該有的字、列ID 對不上、缺欄、只有表頭、空檔，<code>review-import</code> 都會退件並講清楚是哪一種錯。</p>
+
+<h3>程式怎麼把關 LLM 的輸出</h3>
+<ul>
+  <li>只驗格式與一致性，不改 LLM 的判斷</li>
+  <li>決定表每一列的候選全文有指紋；被手改過的列不匯入 AI 三欄，列在報告的「原文已修改未匯入」表</li>
+  <li>AI CSV 存成 Big5 或 UTF-16 也讀得進</li>
+  <li>寫回決定表後產 <code>LLM審查報告.xlsx</code>（總結、候選審查、異動審查；xlsx 寫不出來才退成 csv）</li>
+</ul>
+
+<h3>LLM 的共同規則</h3>
+<ul>
+  <li>只讀候選集，不讀全文（50 頁內規 LLM 一定漏看）</li>
+  <li>每一個主張標條號；標不出來就不講</li>
+  <li>標信心程度：明確有問題／疑似請人工確認／不確定</li>
+  <li>不為了給答案編理由；判斷不出來寫「不確定」</li>
+  <li>只提問題與建議，不改任何條文，不代填「要改嗎」</li>
+</ul>
+
+<h2 id="accept">六、驗收：三個問題與跳過兩類</h2>
+<table>
+  <tr><th>問</th><th>怎麼查</th><th>擋不擋</th></tr>
+  <tr><td>一、填了改或刪除的列，定稿裡真的改了嗎？</td><td>「改成什麼」不在乾淨版、或「刪除」的原文還在 → 未改到。apply 跳過的「程式做不到」四類自然落在這裡</td><td>擋</td></tr>
+  <tr><td>二、還有留空沒決定的列嗎？</td><td>「要改嗎」空白 → 未決定（「不改」算已決定）</td><td>擋</td></tr>
+  <tr><td>三、定稿冒出初比對沒列過的新候選嗎？</td><td>終比對候選的指紋不在初比對的已知集合裡；多本時含跨本重算</td><td>擋</td></tr>
+  <tr><td>四、填了改但改成什麼等於原文</td><td>人自己選的不改，單獨報一行</td><td>不擋</td></tr>
+</table>
+<div class="tip">三問都是零才叫「改好」。但「改好」那張紙上會附這一輪的提醒：有幾處標不上去、幾列跳過。三問皆零但有警告時，結論寫「請先看提醒再決定是否送出」。</div>
+
+<h2 id="files">七、產出檔放在哪</h2>
+<table>
+  <tr><th>格</th><th>放什麼</th><th>誰用</th></tr>
+  <tr><td class="h"><strong>審閱文件</strong></td><td>修正對照表.xlsx／.docx、標註版全文.docx、條文檢查報告.xlsx、候選明細.xlsx、LLM審查報告.xlsx、套用報告.txt、新版_定稿.docx、乾淨版、終比對候選表.xlsx、終比對驗收報告.txt、各種 提醒.txt；批次根目錄的批次摘要、批次驗收摘要</td><td>人看</td></tr>
+  <tr><td class="h"><strong>填寫表單</strong></td><td>連帶決定表.csv、AI候選判斷.csv、AI異動審查.csv</td><td>人填、程式回頭讀</td></tr>
+  <tr><td class="p"><strong>系統檔案</strong></td><td>指紋 .json、異動清單.json、語意輸入／語意候選、LLM審查包_*.md、LLM異動清單.md、輸入/（留底原始檔）、歷次/（上一輪歸檔）</td><td>程式與 LLM</td></tr>
+</table>
+<p class="small">給人看的表只出一種格式：xlsx 優先，寫不出來才退 csv；標註版全文只出 docx；修正對照表另留一份公文格式的 docx。舊版本平鋪的產出資料夾仍讀得到，會提醒「舊排法」，新產出寫進三格。</p>
+
+<h2 id="rules">八、幾條不能忘的原則</h2>
+<ul>
+  <li><strong>候選不是結論。</strong>程式和 LLM 只挑出可疑的，改不改由人決定。</li>
+  <li><strong>未檢查不等於通過。</strong>看到「未檢查」要講原因，自己補看。</li>
+  <li><strong>提醒一則都不能吞。</strong>以 <code>提醒.txt</code> 為準，畫面會被洗掉。</li>
+  <li><strong>草稿中途不要換。</strong>指紋對不上整支停；換了就重跑 compare。</li>
+  <li><strong>舊決定表不要沿用。</strong>段次是共用座標，讀檔規則變過就重跑 compare 再把決定搬過去。</li>
+  <li><strong>定稿一定要在有 Word 的電腦開一次</strong>，確認修訂看得到、接受與拒絕都正常。</li>
+  <li><strong>最終仍需人工複核後才能送出。</strong></li>
+</ul>
+
+<p class="small" style="margin-top:40px">細節與指令：<code>reg/SKILL.md</code>（本機）、<code>reg/platform/SKILL.spade.md</code>（SPADE）、<code>reg/reference/02_改內規_Step0到6.md</code>、<code>03_套用連帶改動.md</code>、<code>04_平台差異.md</code>。</p>
+</div>
+</body>
+</html>
